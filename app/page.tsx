@@ -455,3 +455,5 @@ export default function MessengerPage() {
     </Suspense>
   );
 }
+
+// Realtime receiveMessage sync update
