@@ -2,12 +2,15 @@ import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
 
-export const getSocket = (serverUrl: string): Socket => {
+export const getSocket = (serverUrl: string = "http://localhost:8000"): Socket => {
   if (!socket) {
     socket = io(`${serverUrl}/realtime`, {
-      autoConnect: false,
+      autoConnect: true,
       withCredentials: true,
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 1000,
     });
   }
 
