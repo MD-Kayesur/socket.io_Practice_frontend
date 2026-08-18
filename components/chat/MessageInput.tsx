@@ -43,7 +43,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (!message || disabled) {
       return;
     }
-
+    console.log("message", message);
     onSendMessage(message);
 
     setText("");
