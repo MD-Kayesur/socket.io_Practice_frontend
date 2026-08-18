@@ -457,3 +457,4 @@ export default function MessengerPage() {
 }
 
 // Realtime receiveMessage sync update
+// Unread notification badge tracking update
