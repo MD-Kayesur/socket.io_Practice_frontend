@@ -1,192 +1,217 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChatSidebar, Contact } from "@/components/chat/ChatSidebar";
-import {
-  ChatWindow,
-  Message,
-} from "@/components/chat/ChatWindow";
+import { ChatWindow, Message } from "@/components/chat/ChatWindow";
 import { SocketStatusBadge } from "@/components/chat/SocketStatusBadge";
-import {
-  destroySocket,
-  getSocket,
-} from "@/lib/socket";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { getSocket } from "@/lib/socket";
+import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import { setActiveContactId, setSocketStatus } from "@/redux/slices/chatSlice";
+import { logout, setUser } from "@/redux/slices/authSlice";
+import { useGetMeQuery } from "@/redux/api/authApi";
+import { LogIn, LogOut, User as UserIcon, Users } from "lucide-react";
+import Link from "next/link";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export default function MessengerPage() {
-  const [socketStatus, setSocketStatus] = useState<
-    "connected" | "connecting" | "disconnected"
-  >("disconnected");
+function MessengerContent() {
+  const searchParams = useSearchParams();
+  const dispatch = useAppDispatch();
+  const { activeContactId, socketStatus } = useAppSelector((state) => state.chat);
+  const { user: authUser, isAuthenticated } = useAppSelector((state) => state.auth);
 
-  /**
-   * Current logged-in user
-   *
-   * Later replace this with your Auth/JWT user.
-   */
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Fetch logged in user details
+  const { data: meData } = useGetMeQuery(undefined, {
+    skip: !isAuthenticated,
+  });
+
+  useEffect(() => {
+    if (meData?.user) {
+      dispatch(setUser(meData.user));
+    }
+  }, [meData, dispatch]);
+
   const currentUser = useMemo(
     () => ({
-      id: "user-me",
-      name: "Kayesur (You)",
+      id: authUser?.id || "user-me",
+      name: authUser?.name || "Guest User",
       avatar:
+        authUser?.avatar ||
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80",
       status: "online",
     }),
-    []
+    [authUser]
   );
 
-  const [contacts, setContacts] = useState<Contact[]>([
-    {
-      id: "contact-1",
-      name: "Sarah Jenkins",
-      avatar:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80",
-      status: "online",
-      lastMessage:
-        "Hey! Did you get the NestJS backend running on port 8000?",
-      lastMessageTime: "12:42 PM",
-      unreadCount: 2,
-    },
-    {
-      id: "contact-2",
-      name: "Alex Rivera",
-      avatar:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80",
-      status: "online",
-      lastMessage:
-        "Socket.io real-time connection is looking super smooth!",
-      lastMessageTime: "11:15 AM",
-      unreadCount: 0,
-    },
-    {
-      id: "contact-3",
-      name: "Elena Rostova",
-      avatar:
-        "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=250&q=80",
-      status: "away",
-      lastMessage:
-        "I'll review the database schema once Prisma is ready.",
-      lastMessageTime: "Yesterday",
-      unreadCount: 0,
-    },
-  ]);
+  const contactsStorageKey = `messenger_contacts_${currentUser.id}`;
+  const messagesStorageKey = `messenger_messages_${currentUser.id}`;
+  const activeStorageKey = `messenger_active_${currentUser.id}`;
 
-  const [activeContactId, setActiveContactId] =
-    useState("contact-1");
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const [messagesMap, setMessagesMap] = useState<
-    Record<string, Message[]>
-  >({
-    "contact-1": [
-      {
-        id: "m1",
-        senderId: "contact-1",
-        recipientId: "user-me",
-        text: "Hi Kayesur! Welcome to the new Messenger UI.",
-        timestamp: "12:40 PM",
-        status: "read",
-      },
-      {
-        id: "m2",
-        senderId: "user-me",
-        recipientId: "contact-1",
-        text: "Thanks Sarah! I built this with Next.js and Socket.io.",
-        timestamp: "12:41 PM",
-        status: "read",
-      },
-      {
-        id: "m3",
-        senderId: "contact-1",
-        recipientId: "user-me",
-        text:
-          "Hey! Did you get the NestJS backend running on port 8000?",
-        timestamp: "12:42 PM",
-        status: "read",
-      },
-    ],
+  // 1. Load persisted state from localStorage on mount / user change
+  useEffect(() => {
+    try {
+      const savedContacts = localStorage.getItem(contactsStorageKey);
+      const savedMessages = localStorage.getItem(messagesStorageKey);
+      const savedActive = localStorage.getItem(activeStorageKey);
 
-    "contact-2": [
-      {
-        id: "m4",
-        senderId: "contact-2",
-        recipientId: "user-me",
-        text:
-          "Socket.io real-time connection is looking super smooth!",
-        timestamp: "11:15 AM",
-        status: "read",
-      },
-    ],
+      if (savedContacts) {
+        const parsed = JSON.parse(savedContacts);
+        setContacts(parsed);
+      } else {
+        setContacts([]);
+      }
 
-    "contact-3": [
-      {
-        id: "m5",
-        senderId: "contact-3",
-        recipientId: "user-me",
-        text:
-          "I'll review the database schema once Prisma is ready.",
-        timestamp: "Yesterday",
-        status: "read",
-      },
-    ],
-  });
+      if (savedMessages) {
+        const parsed = JSON.parse(savedMessages);
+        setMessagesMap(parsed);
+      } else {
+        setMessagesMap({});
+      }
+
+      if (savedActive) {
+        dispatch(setActiveContactId(savedActive));
+      }
+    } catch (e) {
+      console.error("Failed to load state from localStorage", e);
+    } finally {
+      setIsInitialized(true);
+    }
+  }, [currentUser.id, contactsStorageKey, messagesStorageKey, activeStorageKey, dispatch]);
+
+  // 2. Persist state changes to localStorage
+  useEffect(() => {
+    if (!isInitialized) return;
+    try {
+      localStorage.setItem(contactsStorageKey, JSON.stringify(contacts));
+    } catch (e) {
+      console.error("Failed to save contacts to localStorage", e);
+    }
+  }, [contacts, contactsStorageKey, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    try {
+      localStorage.setItem(messagesStorageKey, JSON.stringify(messagesMap));
+    } catch (e) {
+      console.error("Failed to save messages to localStorage", e);
+    }
+  }, [messagesMap, messagesStorageKey, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized || !activeContactId) return;
+    try {
+      localStorage.setItem(activeStorageKey, activeContactId);
+    } catch (e) {
+      console.error("Failed to save activeContactId to localStorage", e);
+    }
+  }, [activeContactId, activeStorageKey, isInitialized]);
 
   const [isOtherTyping, setIsOtherTyping] = useState(false);
 
-  /**
-   * ---------------------------------------------------------
-   * SOCKET CONNECTION
-   * ---------------------------------------------------------
-   *
-   * This effect runs ONCE.
-   *
-   * Do NOT put activeContactId here.
-   */
+  // 3. Handle URL query parameters when a user selects "Message" from /users page
+  useEffect(() => {
+    const chatWith = searchParams.get("chatWith");
+    const rawUserData = searchParams.get("userData");
+
+    if (chatWith) {
+      let targetUser = {
+        id: chatWith,
+        name: "User",
+        avatar:
+          "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80",
+        status: "online" as const,
+      };
+
+      if (rawUserData) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(rawUserData));
+          targetUser = {
+            id: parsed.id,
+            name: parsed.name,
+            avatar:
+              parsed.avatar ||
+              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80",
+            status: "online",
+          };
+        } catch (e) {
+          console.error("Failed to parse user data param", e);
+        }
+      }
+
+      // Add selected user from /users table to top of sidebar
+      setContacts((prev) => {
+        const target = prev.find((c) => c.id === targetUser.id);
+        const remaining = prev.filter((c) => c.id !== targetUser.id);
+
+        if (target) {
+          return [target, ...remaining];
+        }
+
+        const newContact: Contact = {
+          id: targetUser.id,
+          name: targetUser.name,
+          avatar: targetUser.avatar,
+          status: "online",
+          lastMessage: "Conversation started",
+          lastMessageTime: "Just now",
+          unreadCount: 0,
+        };
+
+        return [newContact, ...remaining];
+      });
+
+      dispatch(setActiveContactId(targetUser.id));
+    }
+  }, [searchParams, dispatch]);
+
+  // 4. Initialize Socket Connection & Event Handlers
   useEffect(() => {
     const socket = getSocket(API_URL);
 
-    setSocketStatus("connecting");
+    if (socket.connected) {
+      dispatch(setSocketStatus("connected"));
+      socket.emit("join-user", { userId: currentUser.id });
+    } else {
+      dispatch(setSocketStatus("connecting"));
+    }
 
     const handleConnect = () => {
       console.log("Socket connected:", socket.id);
-
-      setSocketStatus("connected");
-
-      /**
-       * Join personal user room.
-       *
-       * NestJS will use this room to send
-       * messages specifically to this user.
-       */
-      socket.emit("join-user", {
-        userId: currentUser.id,
-      });
+      dispatch(setSocketStatus("connected"));
+      socket.emit("join-user", { userId: currentUser.id });
     };
 
     const handleDisconnect = () => {
       console.log("Socket disconnected");
-
-      setSocketStatus("disconnected");
+      dispatch(setSocketStatus("disconnected"));
       setIsOtherTyping(false);
     };
 
     const handleConnectError = (error: Error) => {
       console.error("Socket connection error:", error);
-
-      setSocketStatus("disconnected");
+      dispatch(setSocketStatus("disconnected"));
     };
 
-    /**
-     * Incoming message
-     */
+    // Incoming real-time message handler
     const handleReceiveMessage = (data: {
       id?: string;
       senderId: string;
+      senderName?: string;
+      senderAvatar?: string;
       recipientId: string;
       text: string;
       timestamp?: string;
     }) => {
+      console.log("Received incoming socket message:", data);
+
       const timestamp =
         data.timestamp ||
         new Date().toLocaleTimeString([], {
@@ -203,60 +228,52 @@ export default function MessengerPage() {
         status: "delivered",
       };
 
-      /**
-       * Add message to the correct conversation.
-       */
       setMessagesMap((prev) => ({
         ...prev,
-        [data.senderId]: [
-          ...(prev[data.senderId] || []),
-          newMessage,
-        ],
+        [data.senderId]: [...(prev[data.senderId] || []), newMessage],
       }));
 
-      /**
-       * Update sidebar.
-       */
-      setContacts((prev) =>
-        prev.map((contact) => {
-          if (contact.id !== data.senderId) {
-            return contact;
-          }
+      // Dynamically add sender to sidebar if not present, and move to top with unread badge
+      setContacts((prev) => {
+        const exists = prev.some((c) => c.id === data.senderId);
+        const isActive = activeContactId === data.senderId;
 
-          const isActive = activeContactId === data.senderId;
-
-          return {
-            ...contact,
+        if (!exists) {
+          const newContact: Contact = {
+            id: data.senderId,
+            name: data.senderName || `User (${data.senderId.slice(0, 6)})`,
+            avatar:
+              data.senderAvatar ||
+              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80",
+            status: "online",
             lastMessage: data.text,
             lastMessageTime: timestamp,
-            unreadCount: isActive
-              ? 0
-              : (contact.unreadCount || 0) + 1,
+            unreadCount: isActive ? 0 : 1,
           };
-        })
-      );
+          return [newContact, ...prev];
+        }
 
-      /**
-       * Stop typing indicator.
-       */
+        const target = prev.find((c) => c.id === data.senderId)!;
+        const remaining = prev.filter((c) => c.id !== data.senderId);
+
+        const updatedTarget: Contact = {
+          ...target,
+          lastMessage: data.text,
+          lastMessageTime: timestamp,
+          unreadCount: isActive ? 0 : (target.unreadCount || 0) + 1,
+        };
+
+        return [updatedTarget, ...remaining];
+      });
+
       setIsOtherTyping(false);
     };
 
-    /**
-     * Typing event.
-     */
-    const handleUserTyping = (data: {
-      senderId: string;
-    }) => {
-      if (data.senderId !== activeContactId) {
-        return;
+    const handleUserTyping = (data: { senderId: string }) => {
+      if (data.senderId === activeContactId) {
+        setIsOtherTyping(true);
+        setTimeout(() => setIsOtherTyping(false), 2500);
       }
-
-      setIsOtherTyping(true);
-
-      setTimeout(() => {
-        setIsOtherTyping(false);
-      }, 2500);
     };
 
     socket.on("connect", handleConnect);
@@ -265,8 +282,6 @@ export default function MessengerPage() {
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("userTyping", handleUserTyping);
 
-    socket.connect();
-
     return () => {
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
@@ -274,48 +289,25 @@ export default function MessengerPage() {
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("userTyping", handleUserTyping);
     };
-  }, [currentUser.id]);
+  }, [currentUser.id, activeContactId, dispatch]);
 
-  /**
-   * ---------------------------------------------------------
-   * RECONNECT
-   * ---------------------------------------------------------
-   */
   const handleReconnect = useCallback(() => {
     const socket = getSocket(API_URL);
-
     socket.disconnect();
+    dispatch(setSocketStatus("connecting"));
+    setTimeout(() => socket.connect(), 300);
+  }, [dispatch]);
 
-    setSocketStatus("connecting");
-
-    setTimeout(() => {
-      socket.connect();
-    }, 300);
-  }, []);
-
-  /**
-   * ---------------------------------------------------------
-   * SEND MESSAGE
-   * ---------------------------------------------------------
-   */
+  // Send message and bump active conversation to the top of the sidebar
   const handleSendMessage = useCallback(
     (text: string) => {
       const socket = getSocket(API_URL);
-
-      if (!socket.connected) {
-        console.warn("Socket is not connected");
-
-        return;
-      }
 
       const timestamp = new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
 
-      /**
-       * Optimistic UI.
-       */
       const tempMessage: Message = {
         id: `temp-${crypto.randomUUID()}`,
         senderId: currentUser.id,
@@ -327,102 +319,108 @@ export default function MessengerPage() {
 
       setMessagesMap((prev) => ({
         ...prev,
-        [activeContactId]: [
-          ...(prev[activeContactId] || []),
-          tempMessage,
-        ],
+        [activeContactId]: [...(prev[activeContactId] || []), tempMessage],
       }));
 
-      /**
-       * Update sidebar immediately.
-       */
-      setContacts((prev) =>
-        prev.map((contact) =>
-          contact.id === activeContactId
-            ? {
-                ...contact,
-                lastMessage: text,
-                lastMessageTime: timestamp,
-                unreadCount: 0,
-              }
-            : contact
-        )
-      );
+      // Move active contact to top of sidebar
+      setContacts((prev) => {
+        const target = prev.find((c) => c.id === activeContactId);
+        const remaining = prev.filter((c) => c.id !== activeContactId);
 
-      /**
-       * Send to NestJS.
-       */
-      socket.emit("sendMessage", {
-        senderId: currentUser.id,
-        recipientId: activeContactId,
-        text,
+        if (target) {
+          const updatedTarget: Contact = {
+            ...target,
+            lastMessage: text,
+            lastMessageTime: timestamp,
+            unreadCount: 0,
+          };
+          return [updatedTarget, ...remaining];
+        }
+
+        return prev;
       });
+
+      if (socket.connected) {
+        socket.emit("sendMessage", {
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderAvatar: currentUser.avatar,
+          recipientId: activeContactId,
+          text,
+        });
+      }
     },
-    [activeContactId, currentUser.id]
+    [activeContactId, currentUser.id, currentUser.name, currentUser.avatar]
   );
 
-  /**
-   * ---------------------------------------------------------
-   * TYPING
-   * ---------------------------------------------------------
-   */
   const handleTyping = useCallback(() => {
     const socket = getSocket(API_URL);
-
-    if (!socket.connected) {
-      return;
+    if (socket.connected) {
+      socket.emit("typing", {
+        senderId: currentUser.id,
+        recipientId: activeContactId,
+      });
     }
-
-    socket.emit("typing", {
-      senderId: currentUser.id,
-      recipientId: activeContactId,
-    });
   }, [activeContactId, currentUser.id]);
 
-  /**
-   * ---------------------------------------------------------
-   * SELECT CONTACT
-   * ---------------------------------------------------------
-   */
   const handleSelectContact = (id: string) => {
-    setActiveContactId(id);
-
+    dispatch(setActiveContactId(id));
     setIsOtherTyping(false);
-
     setContacts((prev) =>
-      prev.map((contact) =>
-        contact.id === id
-          ? {
-              ...contact,
-              unreadCount: 0,
-            }
-          : contact
-      )
+      prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c))
     );
   };
 
-  /**
-   * ---------------------------------------------------------
-   * ACTIVE CONTACT
-   * ---------------------------------------------------------
-   */
   const activeContact =
-    contacts.find(
-      (contact) => contact.id === activeContactId
-    ) || null;
-
-  const currentMessages =
-    messagesMap[activeContactId] || [];
+    contacts.find((c) => c.id === activeContactId) || null;
+  const currentMessages = messagesMap[activeContactId] || [];
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      <SocketStatusBadge
-        status={socketStatus}
-        serverUrl={API_URL}
-        onReconnect={handleReconnect}
-         
-      />
+      {/* Top Socket & Redux Auth Status Bar */}
+      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-1.5">
+        <SocketStatusBadge
+          status={socketStatus}
+          serverUrl={API_URL}
+          onReconnect={handleReconnect}
+        />
 
+        <div className="flex items-center gap-3 text-xs">
+          <Link
+            href="/users"
+            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 font-medium rounded border border-indigo-500/30 transition-all"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Users Directory Table
+          </Link>
+
+          {isAuthenticated ? (
+            <div className="flex items-center gap-2">
+              <span className="text-emerald-400 font-medium flex items-center gap-1">
+                <UserIcon className="w-3.5 h-3.5" />
+                {authUser?.name}
+              </span>
+              <button
+                onClick={() => dispatch(logout())}
+                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-300 rounded border border-slate-700 transition-colors"
+              >
+                <LogOut className="w-3 h-3" />
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded transition-colors shadow-sm"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Log In / Sign Up
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
         <ChatSidebar
           contacts={contacts}
@@ -440,11 +438,20 @@ export default function MessengerPage() {
           onTyping={handleTyping}
         />
       </div>
+
+      {/* Redux Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
     </div>
   );
 }
 
-
-
-
-
+export default function MessengerPage() {
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-slate-950 flex items-center justify-center text-slate-400">Loading Messenger...</div>}>
+      <MessengerContent />
+    </Suspense>
+  );
+}
