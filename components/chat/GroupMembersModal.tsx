@@ -15,6 +15,9 @@ import {
   Loader2,
   Shield,
 } from "lucide-react";
+import { getSocket } from "@/lib/socket";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface GroupMembersModalProps {
   isOpen: boolean;
@@ -59,6 +62,13 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   const handleRemove = async (userId: string) => {
     try {
       await removeMember({ groupId, userId }).unwrap();
+
+      // Emit socket event to notify removed member immediately
+      const socket = getSocket(API_URL);
+      if (socket.connected) {
+        socket.emit("notifyMemberRemoved", { groupId, userId });
+      }
+
       refetch();
     } catch (err) {
       console.error("Failed to remove group member:", err);

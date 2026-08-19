@@ -61,6 +61,7 @@ function MessengerContent() {
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [isGroupMembersModalOpen, setIsGroupMembersModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [removedGroupIds, setRemovedGroupIds] = useState<string[]>([]);
 
   const [typingInfo, setTypingInfo] = useState<{
     senderId: string;
@@ -102,7 +103,7 @@ function MessengerContent() {
   const { data: dbConversations } = useGetUserConversationsQuery(currentUser.id, {
     skip: !isAuthenticated || currentUser.id === "user-me",
   });
-  const { data: dbGroups } = useGetUserGroupsQuery(currentUser.id, {
+  const { data: dbGroups, refetch: refetchGroups } = useGetUserGroupsQuery(currentUser.id, {
     skip: !isAuthenticated || currentUser.id === "user-me",
   });
 
@@ -782,12 +783,27 @@ function MessengerContent() {
       });
     };
 
+    const handleRemovedFromGroup = (data: { groupId: string; userId: string }) => {
+      console.log("Removed from group event:", data);
+      if (data.userId === currentUser.id) {
+        setRemovedGroupIds((prev) => Array.from(new Set([...prev, data.groupId])));
+      }
+      refetchGroups();
+    };
+
+    const handleMemberRemovedFromGroup = (data: { groupId: string; userId: string }) => {
+      console.log("Group member removed event:", data);
+      refetchGroups();
+    };
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("receiveGroupMessage", handleReceiveGroupMessage);
     socket.on("addedToGroup", handleAddedToGroup);
+    socket.on("removedFromGroup", handleRemovedFromGroup);
+    socket.on("memberRemovedFromGroup", handleMemberRemovedFromGroup);
     socket.on("messageSent", handleMessageSent);
     socket.on("messagesRead", handleMessagesRead);
     socket.on("userTyping", handleUserTyping);
@@ -800,6 +816,8 @@ function MessengerContent() {
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("receiveGroupMessage", handleReceiveGroupMessage);
       socket.off("addedToGroup", handleAddedToGroup);
+      socket.off("removedFromGroup", handleRemovedFromGroup);
+      socket.off("memberRemovedFromGroup", handleMemberRemovedFromGroup);
       socket.off("messageSent", handleMessageSent);
       socket.off("messagesRead", handleMessagesRead);
       socket.off("userTyping", handleUserTyping);
@@ -1047,6 +1065,14 @@ function MessengerContent() {
             currentUserId={currentUser.id}
             isTyping={Boolean(typingInfo)}
             typingUserName={typingInfo?.senderName}
+            isRemovedFromGroup={
+              Boolean(
+                activeContact?.isGroup &&
+                  (removedGroupIds.includes(activeContact.id) ||
+                    (activeContact.members &&
+                      !activeContact.members.some((m: any) => m.id === currentUser.id)))
+              )
+            }
             onSendMessage={handleSendMessage}
             onTyping={handleTyping}
             isAuthenticated={isAuthenticated}

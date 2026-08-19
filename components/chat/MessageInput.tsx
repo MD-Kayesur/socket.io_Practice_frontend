@@ -108,7 +108,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               if (!isAuthenticated) onRequireAuth?.();
             }}
             placeholder={
-              isAuthenticated
+              disabled
+                ? "You are no longer a member of this group"
+                : isAuthenticated
                 ? "Type a message..."
                 : "Create an account or log in to message..."
             }

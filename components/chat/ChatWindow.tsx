@@ -12,6 +12,7 @@ import {
   CheckCheck,
   MoreVertical,
   Shield,
+  ShieldAlert,
   Trash2,
   ArrowLeft,
   Menu,
@@ -28,7 +29,7 @@ export interface Message {
   groupId?: string;
   text: string;
   timestamp: string;
-  status: "sent" | "delivered" | "read";
+  status?: "sent" | "delivered" | "read";
   isGroup?: boolean;
 }
 
@@ -38,6 +39,7 @@ interface ChatWindowProps {
   currentUserId: string;
   isTyping: boolean;
   typingUserName?: string;
+  isRemovedFromGroup?: boolean;
   onSendMessage: (text: string) => void;
   onTyping?: () => void;
   isAuthenticated?: boolean;
@@ -57,6 +59,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   currentUserId,
   isTyping,
   typingUserName,
+  isRemovedFromGroup = false,
   onSendMessage,
   onTyping,
   isAuthenticated = true,
@@ -316,6 +319,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       </div>
 
+      {/* Removed from group banner */}
+      {activeContact.isGroup && isRemovedFromGroup && (
+        <div className="bg-rose-950/80 border-b border-rose-800/80 p-3 px-4 text-center text-xs font-semibold text-rose-200 flex items-center justify-center gap-2 animate-in fade-in duration-150">
+          <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <span>You have been removed from this group. You are no longer available to send messages.</span>
+        </div>
+      )}
+
       {/* Message Stream */}
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 custom-scrollbar">
         <div className="flex justify-center my-2">
@@ -401,6 +412,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       <MessageInput
         onSendMessage={onSendMessage}
         onTyping={onTyping}
+        disabled={isRemovedFromGroup}
         isAuthenticated={isAuthenticated}
         onRequireAuth={onRequireAuth}
       />
