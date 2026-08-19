@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatSidebar, Contact } from "@/components/chat/ChatSidebar";
 import { ChatWindow, Message } from "@/components/chat/ChatWindow";
 import { SocketStatusBadge } from "@/components/chat/SocketStatusBadge";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { NewConversationModal } from "@/components/chat/NewConversationModal";
 import { getSocket } from "@/lib/socket";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { setActiveContactId, setSocketStatus } from "@/redux/slices/chatSlice";
@@ -28,6 +29,13 @@ function MessengerContent() {
   const { user: authUser, isAuthenticated } = useAppSelector((state) => state.auth);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+
+  // Keep ref of activeContactId so socket listener always checks latest active chat
+  const activeContactIdRef = useRef(activeContactId);
+  useEffect(() => {
+    activeContactIdRef.current = activeContactId;
+  }, [activeContactId]);
 
   // Fetch logged in user details
   const { data: meData } = useGetMeQuery(undefined, {
@@ -64,34 +72,46 @@ function MessengerContent() {
   const contactsStorageKey = `messenger_contacts_${currentUser.id}`;
   const messagesStorageKey = `messenger_messages_${currentUser.id}`;
   const activeStorageKey = `messenger_active_${currentUser.id}`;
+  const hiddenContactsStorageKey = `messenger_hidden_contacts_${currentUser.id}`;
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
+  const [hiddenContactIds, setHiddenContactIds] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Sync DB conversations into contacts list
+  // Sync DB conversations into contacts list (excluding permanently hidden contacts)
   useEffect(() => {
+    let currentHidden = hiddenContactIds;
+    try {
+      const savedHidden = localStorage.getItem(hiddenContactsStorageKey);
+      if (savedHidden) {
+        currentHidden = JSON.parse(savedHidden);
+      }
+    } catch (e) {}
+
     if (dbConversations && dbConversations.length > 0) {
       setContacts((prev) => {
-        const cleanPrev = prev.filter((c) => c.id !== currentUser.id);
+        const cleanPrev = prev.filter(
+          (c) => c.id !== currentUser.id && !currentHidden.includes(c.id)
+        );
         const map = new Map<string, Contact>();
 
         // Add DB conversations first
         for (const dbContact of dbConversations) {
-          if (dbContact.id !== currentUser.id) {
+          if (dbContact.id !== currentUser.id && !currentHidden.includes(dbContact.id)) {
             map.set(dbContact.id, dbContact);
           }
         }
         // Retain local contacts if not present
         for (const c of cleanPrev) {
-          if (!map.has(c.id)) {
+          if (!map.has(c.id) && !currentHidden.includes(c.id)) {
             map.set(c.id, c);
           }
         }
         return Array.from(map.values());
       });
     }
-  }, [dbConversations, currentUser.id]);
+  }, [dbConversations, currentUser.id, hiddenContactsStorageKey, hiddenContactIds]);
 
   // Fetch conversation message history from PostgreSQL when active contact changes
   useEffect(() => {
@@ -124,11 +144,23 @@ function MessengerContent() {
       const savedContacts = localStorage.getItem(contactsStorageKey);
       const savedMessages = localStorage.getItem(messagesStorageKey);
       const savedActive = localStorage.getItem(activeStorageKey);
+      const savedHidden = localStorage.getItem(hiddenContactsStorageKey);
+
+      let activeHidden: string[] = [];
+      if (savedHidden) {
+        activeHidden = JSON.parse(savedHidden);
+        setHiddenContactIds(activeHidden);
+      } else {
+        setHiddenContactIds([]);
+      }
 
       if (savedContacts) {
         const parsed: Contact[] = JSON.parse(savedContacts);
         const cleanContacts = parsed.filter(
-          (c) => c.id !== currentUser.id && c.name?.toLowerCase() !== currentUser.name?.toLowerCase()
+          (c) =>
+            c.id !== currentUser.id &&
+            c.name?.toLowerCase() !== currentUser.name?.toLowerCase() &&
+            !activeHidden.includes(c.id)
         );
         setContacts(cleanContacts);
       } else {
@@ -142,7 +174,7 @@ function MessengerContent() {
         setMessagesMap({});
       }
 
-      if (savedActive && savedActive !== currentUser.id) {
+      if (savedActive && savedActive !== currentUser.id && !activeHidden.includes(savedActive)) {
         dispatch(setActiveContactId(savedActive));
       }
     } catch (e) {
@@ -150,7 +182,7 @@ function MessengerContent() {
     } finally {
       setIsInitialized(true);
     }
-  }, [currentUser.id, currentUser.name, contactsStorageKey, messagesStorageKey, activeStorageKey, dispatch]);
+  }, [currentUser.id, currentUser.name, contactsStorageKey, messagesStorageKey, activeStorageKey, hiddenContactsStorageKey, dispatch]);
 
   // 2. Persist state changes to localStorage
   useEffect(() => {
@@ -188,6 +220,15 @@ function MessengerContent() {
     const rawUserData = searchParams.get("userData");
 
     if (chatWith && chatWith !== currentUser.id) {
+      // Unhide contact if it was hidden previously
+      setHiddenContactIds((prev) => {
+        const next = prev.filter((id) => id !== chatWith);
+        try {
+          localStorage.setItem(hiddenContactsStorageKey, JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
       let targetUser = {
         id: chatWith,
         name: "User",
@@ -237,8 +278,51 @@ function MessengerContent() {
       });
 
       dispatch(setActiveContactId(targetUser.id));
+
+      // Clear query string from URL so refreshing won't re-trigger chatWith
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", "/");
+      }
     }
-  }, [searchParams, currentUser.id, dispatch]);
+  }, [searchParams, currentUser.id, hiddenContactsStorageKey, dispatch]);
+
+  const handleSelectNewChatUser = useCallback(
+    (user: { id: string; name: string; avatar: string }) => {
+      // Unhide contact if it was hidden previously
+      setHiddenContactIds((prev) => {
+        const next = prev.filter((id) => id !== user.id);
+        try {
+          localStorage.setItem(hiddenContactsStorageKey, JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      setContacts((prev) => {
+        const cleanPrev = prev.filter((c) => c.id !== currentUser.id);
+        const target = cleanPrev.find((c) => c.id === user.id);
+        const remaining = cleanPrev.filter((c) => c.id !== user.id);
+
+        if (target) {
+          return [target, ...remaining];
+        }
+
+        const newContact: Contact = {
+          id: user.id,
+          name: user.name,
+          avatar: user.avatar,
+          status: "online",
+          lastMessage: "Started new conversation",
+          lastMessageTime: "Just now",
+          unreadCount: 0,
+        };
+
+        return [newContact, ...remaining];
+      });
+
+      dispatch(setActiveContactId(user.id));
+    },
+    [currentUser.id, hiddenContactsStorageKey, dispatch]
+  );
 
   // 4. Initialize Socket Connection & Event Handlers
   useEffect(() => {
@@ -280,6 +364,9 @@ function MessengerContent() {
     }) => {
       console.log("Received incoming socket message:", data);
 
+      // Unhide contact if it was hidden previously
+      setHiddenContactIds((prev) => prev.filter((id) => id !== data.senderId));
+
       const timestamp =
         data.timestamp ||
         new Date().toLocaleTimeString([], {
@@ -301,10 +388,10 @@ function MessengerContent() {
         [data.senderId]: [...(prev[data.senderId] || []), newMessage],
       }));
 
-      // Dynamically add sender to sidebar if not present, and move to top with unread badge
+      // Dynamically add sender to sidebar if not present, and move to top with unread badge if not active
       setContacts((prev) => {
         const exists = prev.some((c) => c.id === data.senderId);
-        const isActive = activeContactId === data.senderId;
+        const isActive = activeContactIdRef.current === data.senderId;
 
         if (!exists) {
           const newContact: Contact = {
@@ -338,10 +425,43 @@ function MessengerContent() {
     };
 
     const handleUserTyping = (data: { senderId: string }) => {
-      if (data.senderId === activeContactId) {
+      if (data.senderId === activeContactIdRef.current) {
         setIsOtherTyping(true);
         setTimeout(() => setIsOtherTyping(false), 2500);
       }
+    };
+
+    const handleMessageSent = (data: {
+      id: string;
+      senderId: string;
+      recipientId: string;
+      text: string;
+      timestamp: string;
+    }) => {
+      console.log("Received messageSent confirmation:", data);
+      setMessagesMap((prev) => {
+        const contactId = data.recipientId;
+        const existing = prev[contactId] || [];
+        const hasTemp = existing.some((m) => m.id.startsWith("temp-"));
+
+        if (hasTemp) {
+          let replaced = false;
+          const updated = existing.map((m) => {
+            if (!replaced && m.id.startsWith("temp-") && m.text === data.text) {
+              replaced = true;
+              return {
+                ...m,
+                id: data.id,
+                timestamp: data.timestamp,
+                status: "delivered" as const,
+              };
+            }
+            return m;
+          });
+          return { ...prev, [contactId]: updated };
+        }
+        return prev;
+      });
     };
 
     const handleMessageDeleted = (data: { messageId: string; mode: string }) => {
@@ -359,6 +479,7 @@ function MessengerContent() {
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("receiveMessage", handleReceiveMessage);
+    socket.on("messageSent", handleMessageSent);
     socket.on("userTyping", handleUserTyping);
     socket.on("messageDeleted", handleMessageDeleted);
 
@@ -367,10 +488,11 @@ function MessengerContent() {
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
       socket.off("receiveMessage", handleReceiveMessage);
+      socket.off("messageSent", handleMessageSent);
       socket.off("userTyping", handleUserTyping);
       socket.off("messageDeleted", handleMessageDeleted);
     };
-  }, [currentUser.id, activeContactId, dispatch]);
+  }, [currentUser.id, dispatch]);
 
   const handleReconnect = useCallback(() => {
     const socket = getSocket(API_URL);
@@ -386,6 +508,9 @@ function MessengerContent() {
         setIsAuthModalOpen(true);
         return;
       }
+
+      // Unhide active contact if it was hidden previously
+      setHiddenContactIds((prev) => prev.filter((id) => id !== activeContactId));
 
       const socket = getSocket(API_URL);
 
@@ -426,15 +551,17 @@ function MessengerContent() {
         return prev;
       });
 
-      if (socket.connected) {
-        socket.emit("sendMessage", {
-          senderId: currentUser.id,
-          senderName: currentUser.name,
-          senderAvatar: currentUser.avatar,
-          recipientId: activeContactId,
-          text,
-        });
+      if (!socket.connected) {
+        socket.connect();
       }
+
+      socket.emit("sendMessage", {
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        recipientId: activeContactId,
+        text,
+      });
     },
     [activeContactId, currentUser.id, currentUser.name, currentUser.avatar, isAuthenticated]
   );
@@ -491,6 +618,32 @@ function MessengerContent() {
     );
   };
 
+  const handleDeleteContact = useCallback(
+    (contactId: string) => {
+      setHiddenContactIds((prev) => {
+        const next = Array.from(new Set([...prev, contactId]));
+        try {
+          localStorage.setItem(hiddenContactsStorageKey, JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+      setContacts((prev) => {
+        const nextContacts = prev.filter((c) => c.id !== contactId);
+        try {
+          localStorage.setItem(contactsStorageKey, JSON.stringify(nextContacts));
+        } catch (e) {}
+        return nextContacts;
+      });
+      if (activeContactId === contactId) {
+        dispatch(setActiveContactId(""));
+      }
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", "/");
+      }
+    },
+    [activeContactId, hiddenContactsStorageKey, contactsStorageKey, dispatch]
+  );
+
   const activeContact =
     contacts.find((c) => c.id === activeContactId) || null;
   const currentMessages = messagesMap[activeContactId] || [];
@@ -546,6 +699,8 @@ function MessengerContent() {
           contacts={contacts}
           activeContactId={activeContactId}
           onSelectContact={handleSelectContact}
+          onDeleteContact={handleDeleteContact}
+          onOpenNewChatModal={() => setIsNewChatModalOpen(true)}
           currentUser={currentUser}
         />
 
@@ -566,6 +721,14 @@ function MessengerContent() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+      />
+
+      {/* New Conversation User Picker Modal */}
+      <NewConversationModal
+        isOpen={isNewChatModalOpen}
+        onClose={() => setIsNewChatModalOpen(false)}
+        currentUserId={currentUser.id}
+        onSelectUser={handleSelectNewChatUser}
       />
     </div>
   );
