@@ -48,6 +48,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       contact.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const totalUnread = contacts.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+
   return (
     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-slate-900 border-r border-slate-800 h-full select-none flex-shrink-0">
       {/* Header */}
@@ -102,16 +104,16 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search Input */}
       <div className="p-3">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800/80 text-slate-200 placeholder-slate-500 text-xs rounded-lg pl-9 pr-4 py-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-slate-950 border border-slate-800/80 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
           />
         </div>
       </div>
@@ -119,6 +121,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       <div className="px-4 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
         <div className="flex items-center gap-2">
           <span>Direct Messages</span>
+          {totalUnread > 0 && (
+            <span className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse lowercase font-sans">
+              {totalUnread} new
+            </span>
+          )}
         </div>
         <span className="bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
           {filteredContacts.length}
@@ -146,6 +153,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         ) : (
           filteredContacts.map((contact) => {
             const isActive = contact.id === activeContactId;
+            const hasUnread = Boolean(contact.unreadCount && contact.unreadCount > 0);
 
             return (
               <div
@@ -158,6 +166,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
                     isActive
                       ? "bg-indigo-600/20 border border-indigo-500/30 text-slate-100"
+                      : hasUnread
+                      ? "bg-slate-800/80 border border-indigo-500/30 text-slate-100"
                       : "hover:bg-slate-800/60 border border-transparent text-slate-300"
                   }`}
                 >
@@ -180,20 +190,20 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
                   <div className="flex-1 min-w-0 pr-6">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-medium text-sm text-slate-100 truncate">
+                      <h3 className={`text-sm truncate ${hasUnread ? "font-bold text-slate-100" : "font-medium text-slate-200"}`}>
                         {contact.name}
                       </h3>
-                      <span className="text-[11px] text-slate-500">
+                      <span className={`text-[11px] ${hasUnread ? "text-indigo-400 font-semibold" : "text-slate-500"}`}>
                         {contact.lastMessageTime}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400 truncate pr-2">
+                      <p className={`text-xs truncate pr-2 ${hasUnread ? "font-semibold text-indigo-200" : "text-slate-400"}`}>
                         {contact.lastMessage}
                       </p>
-                      {contact.unreadCount && contact.unreadCount > 0 ? (
-                        <span className="bg-indigo-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                      {hasUnread ? (
+                        <span className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center shadow-lg shadow-indigo-600/40 animate-pulse">
                           {contact.unreadCount}
                         </span>
                       ) : null}

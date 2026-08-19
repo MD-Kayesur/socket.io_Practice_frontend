@@ -22,6 +22,26 @@ import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const playNotificationSound = () => {
+  try {
+    if (typeof window === "undefined") return;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (e) {}
+};
+
 function MessengerContent() {
   const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
@@ -97,10 +117,16 @@ function MessengerContent() {
         );
         const map = new Map<string, Contact>();
 
-        // Add DB conversations first
+        // Add DB conversations first, preserving local live unreadCount and socket messages
         for (const dbContact of dbConversations) {
           if (dbContact.id !== currentUser.id && !currentHidden.includes(dbContact.id)) {
-            map.set(dbContact.id, dbContact);
+            const existingLocal = cleanPrev.find((c) => c.id === dbContact.id);
+            map.set(dbContact.id, {
+              ...dbContact,
+              unreadCount: existingLocal?.unreadCount !== undefined ? existingLocal.unreadCount : (dbContact.unreadCount || 0),
+              lastMessage: existingLocal?.lastMessage || dbContact.lastMessage,
+              lastMessageTime: existingLocal?.lastMessageTime || dbContact.lastMessageTime,
+            });
           }
         }
         // Retain local contacts if not present
@@ -185,13 +211,20 @@ function MessengerContent() {
     }
   }, [currentUser.id, currentUser.name, contactsStorageKey, messagesStorageKey, activeStorageKey, hiddenContactsStorageKey, dispatch]);
 
-  // 2. Persist state changes to localStorage
   useEffect(() => {
     if (!isInitialized) return;
     try {
       localStorage.setItem(contactsStorageKey, JSON.stringify(contacts));
     } catch (e) {
       console.error("Failed to save contacts to localStorage", e);
+    }
+
+    // Dynamic browser title notification
+    const totalUnread = contacts.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+    if (totalUnread > 0) {
+      document.title = `(${totalUnread}) New Message${totalUnread > 1 ? "s" : ""} - Socket.io Messenger`;
+    } else {
+      document.title = "Real-Time Socket.io Messenger";
     }
   }, [contacts, contactsStorageKey, isInitialized]);
 
@@ -365,6 +398,13 @@ function MessengerContent() {
     }) => {
       console.log("Received incoming socket message:", data);
 
+      if (data.senderId === currentUser.id) {
+        return;
+      }
+
+      // Play audio notification chime
+      playNotificationSound();
+
       // Unhide contact if it was hidden previously
       setHiddenContactIds((prev) => prev.filter((id) => id !== data.senderId));
 
@@ -375,24 +415,41 @@ function MessengerContent() {
           minute: "2-digit",
         });
 
+      const isActive = activeContactIdRef.current === data.senderId;
+
+      // Send read receipt if recipient is actively viewing this sender's chat
+      if (isActive) {
+        socket.emit("markAsRead", {
+          senderId: data.senderId,
+          recipientId: currentUser.id,
+          messageId: data.id,
+        });
+      }
+
       const newMessage: Message = {
         id: data.id || crypto.randomUUID(),
         senderId: data.senderId,
         recipientId: data.recipientId,
         text: data.text,
         timestamp,
-        status: "delivered",
+        status: isActive ? "read" : "delivered",
       };
 
-      setMessagesMap((prev) => ({
-        ...prev,
-        [data.senderId]: [...(prev[data.senderId] || []), newMessage],
-      }));
+      setMessagesMap((prev) => {
+        const contactId = data.senderId;
+        const existingMsgs = prev[contactId] || [];
+        if (existingMsgs.some((m) => m.id === newMessage.id)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [contactId]: [...existingMsgs, newMessage],
+        };
+      });
 
       // Dynamically add sender to sidebar if not present, and move to top with unread badge if not active
       setContacts((prev) => {
         const exists = prev.some((c) => c.id === data.senderId);
-        const isActive = activeContactIdRef.current === data.senderId;
 
         if (!exists) {
           const newContact: Contact = {
@@ -443,6 +500,11 @@ function MessengerContent() {
       setMessagesMap((prev) => {
         const contactId = data.recipientId;
         const existing = prev[contactId] || [];
+
+        if (existing.some((m) => m.id === data.id)) {
+          return prev;
+        }
+
         const hasTemp = existing.some((m) => m.id.startsWith("temp-"));
 
         if (hasTemp) {
@@ -454,14 +516,47 @@ function MessengerContent() {
                 ...m,
                 id: data.id,
                 timestamp: data.timestamp,
-                status: "delivered" as const,
+                status: "sent" as const,
               };
             }
             return m;
           });
           return { ...prev, [contactId]: updated };
         }
-        return prev;
+
+        return {
+          ...prev,
+          [contactId]: [
+            ...existing,
+            {
+              id: data.id,
+              senderId: data.senderId,
+              recipientId: data.recipientId,
+              text: data.text,
+              timestamp: data.timestamp,
+              status: "sent" as const,
+            },
+          ],
+        };
+      });
+    };
+
+    const handleMessagesRead = (data: {
+      senderId: string;
+      recipientId: string;
+      messageId?: string;
+    }) => {
+      console.log("Recipient read your messages:", data);
+      setMessagesMap((prev) => {
+        const contactId = data.recipientId;
+        const existing = prev[contactId] || [];
+        const updated = existing.map((m) => {
+          if (m.senderId === currentUser.id) {
+            return { ...m, status: "read" as const };
+          }
+          return m;
+        });
+        return { ...prev, [contactId]: updated };
       });
     };
 
@@ -481,6 +576,7 @@ function MessengerContent() {
     socket.on("connect_error", handleConnectError);
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("messageSent", handleMessageSent);
+    socket.on("messagesRead", handleMessagesRead);
     socket.on("userTyping", handleUserTyping);
     socket.on("messageDeleted", handleMessageDeleted);
 
@@ -490,6 +586,7 @@ function MessengerContent() {
       socket.off("connect_error", handleConnectError);
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("messageSent", handleMessageSent);
+      socket.off("messagesRead", handleMessagesRead);
       socket.off("userTyping", handleUserTyping);
       socket.off("messageDeleted", handleMessageDeleted);
     };
@@ -618,6 +715,14 @@ function MessengerContent() {
     setContacts((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c))
     );
+
+    const socket = getSocket(API_URL);
+    if (socket.connected) {
+      socket.emit("markAsRead", {
+        senderId: id,
+        recipientId: currentUser.id,
+      });
+    }
   };
 
   const handleDeleteContact = useCallback(
@@ -661,14 +766,6 @@ function MessengerContent() {
         />
 
         <div className="flex items-center gap-3 text-xs">
-          <Link
-            href="/users"
-            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 font-medium rounded border border-indigo-500/30 transition-all"
-          >
-            <Users className="w-3.5 h-3.5" />
-            Users Directory Table
-          </Link>
-
           {isAuthenticated ? (
             <div className="flex items-center gap-2">
               <span className="text-emerald-400 font-medium flex items-center gap-1">

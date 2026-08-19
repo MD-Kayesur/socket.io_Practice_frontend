@@ -59,12 +59,6 @@ export const SocketStatusBadge: React.FC<
             </span>
           )}
         </div>
-
-        <span className="text-slate-600">|</span>
-
-        <span className="font-mono text-slate-400 text-[11px] bg-slate-800/60 px-2 py-0.5 rounded border border-slate-800">
-          {serverUrl}/realtime
-        </span>
       </div>
 
       <button
