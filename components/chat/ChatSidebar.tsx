@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, MoreVertical, Users, MessageSquarePlus, Trash2, Plus, X } from "lucide-react";
+import { Search, MoreVertical, Users, MessageSquarePlus, Trash2, Plus, X, UserPlus, Users2 } from "lucide-react";
 
 export interface Contact {
   id: string;
@@ -12,6 +12,10 @@ export interface Contact {
   lastMessage: string;
   lastMessageTime: string;
   unreadCount?: number;
+  isGroup?: boolean;
+  memberCount?: number;
+  members?: any[];
+  description?: string;
 }
 
 interface ChatSidebarProps {
@@ -20,6 +24,7 @@ interface ChatSidebarProps {
   onSelectContact: (id: string) => void;
   onDeleteContact?: (id: string) => void;
   onOpenNewChatModal?: () => void;
+  onOpenCreateGroupModal?: () => void;
   onCloseMobileSidebar?: () => void;
   currentUser: {
     id: string;
@@ -35,6 +40,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onSelectContact,
   onDeleteContact,
   onOpenNewChatModal,
+  onOpenCreateGroupModal,
   onCloseMobileSidebar,
   currentUser,
 }) => {
@@ -72,11 +78,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             type="button"
             onClick={onOpenNewChatModal}
-            title="Start new conversation"
+            title="Start 1-on-1 chat"
             className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -84,12 +90,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => router.push("/users")}
-            title="Users Directory"
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition-all"
+            onClick={onOpenCreateGroupModal}
+            title="Create new group chat"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-lg text-xs font-semibold border border-indigo-500/30 transition-all"
           >
             <Users className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Users</span>
+            <span className="hidden sm:inline">+ Group</span>
           </button>
           {onCloseMobileSidebar && (
             <button
@@ -110,7 +116,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
-            placeholder="Search conversations..."
+            placeholder="Search chats & groups..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800/80 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
@@ -120,7 +126,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
       <div className="px-4 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
         <div className="flex items-center gap-2">
-          <span>Direct Messages</span>
+          <span>Conversations</span>
           {totalUnread > 0 && (
             <span className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse lowercase font-sans">
               {totalUnread} new
@@ -139,16 +145,25 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <div>
               <p className="font-semibold text-slate-300">No conversations yet</p>
               <p className="text-[11px] text-slate-500 mt-1">
-                Start a new conversation with a registered user.
+                Start a 1-on-1 chat or create a group with registered users.
               </p>
             </div>
-            <button
-              onClick={onOpenNewChatModal}
-              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md transition-all active:scale-95"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New Conversation
-            </button>
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={onOpenNewChatModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md transition-all active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New Chat
+              </button>
+              <button
+                onClick={onOpenCreateGroupModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-semibold border border-slate-700 transition-all active:scale-95"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Create Group
+              </button>
+            </div>
           </div>
         ) : (
           filteredContacts.map((contact) => {
@@ -177,23 +192,36 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       alt={contact.name}
                       className="w-11 h-11 rounded-full object-cover"
                     />
-                    <span
-                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ring-2 ring-slate-900 ${
-                        contact.status === "online"
-                          ? "bg-emerald-500"
-                          : contact.status === "away"
-                          ? "bg-amber-500"
-                          : "bg-slate-500"
-                      }`}
-                    />
+                    {contact.isGroup ? (
+                      <span className="absolute -bottom-1 -right-1 p-1 bg-indigo-600 text-white rounded-full ring-2 ring-slate-900 shadow">
+                        <Users className="w-2.5 h-2.5" />
+                      </span>
+                    ) : (
+                      <span
+                        className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ring-2 ring-slate-900 ${
+                          contact.status === "online"
+                            ? "bg-emerald-500"
+                            : contact.status === "away"
+                            ? "bg-amber-500"
+                            : "bg-slate-500"
+                        }`}
+                      />
+                    )}
                   </div>
 
                   <div className="flex-1 min-w-0 pr-6">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className={`text-sm truncate ${hasUnread ? "font-bold text-slate-100" : "font-medium text-slate-200"}`}>
-                        {contact.name}
-                      </h3>
-                      <span className={`text-[11px] ${hasUnread ? "text-indigo-400 font-semibold" : "text-slate-500"}`}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className={`text-sm truncate ${hasUnread ? "font-bold text-slate-100" : "font-medium text-slate-200"}`}>
+                          {contact.name}
+                        </h3>
+                        {contact.isGroup && (
+                          <span className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">
+                            Group
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[11px] flex-shrink-0 ${hasUnread ? "text-indigo-400 font-semibold" : "text-slate-500"}`}>
                         {contact.lastMessageTime}
                       </span>
                     </div>
@@ -218,7 +246,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     e.stopPropagation();
                     onDeleteContact?.(contact.id);
                   }}
-                  title="Remove conversation from sidebar"
+                  title="Remove from sidebar"
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/contact:opacity-100 p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

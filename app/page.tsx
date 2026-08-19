@@ -7,6 +7,9 @@ import { ChatWindow, Message } from "@/components/chat/ChatWindow";
 import { SocketStatusBadge } from "@/components/chat/SocketStatusBadge";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { NewConversationModal } from "@/components/chat/NewConversationModal";
+import { CreateGroupModal } from "@/components/chat/CreateGroupModal";
+import { AddMemberModal } from "@/components/chat/AddMemberModal";
+import { GroupMembersModal } from "@/components/chat/GroupMembersModal";
 import { getSocket } from "@/lib/socket";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { setActiveContactId, setSocketStatus } from "@/redux/slices/chatSlice";
@@ -17,6 +20,10 @@ import {
   useLazyGetConversationMessagesQuery,
   useDeleteMessageMutation,
 } from "@/redux/api/messagesApi";
+import {
+  useGetUserGroupsQuery,
+  useLazyGetGroupMessagesQuery,
+} from "@/redux/api/groupsApi";
 import { LogIn, LogOut, User as UserIcon, Users } from "lucide-react";
 import Link from "next/link";
 
@@ -50,7 +57,17 @@ function MessengerContent() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [isGroupMembersModalOpen, setIsGroupMembersModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const [typingInfo, setTypingInfo] = useState<{
+    senderId: string;
+    senderName?: string;
+    groupId?: string;
+  } | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep ref of activeContactId so socket listener always checks latest active chat
   const activeContactIdRef = useRef(activeContactId);
@@ -81,13 +98,17 @@ function MessengerContent() {
     [authUser]
   );
 
-  // Fetch database conversations for current user
+  // Fetch database 1-on-1 conversations and groups for current user
   const { data: dbConversations } = useGetUserConversationsQuery(currentUser.id, {
     skip: !isAuthenticated || currentUser.id === "user-me",
   });
+  const { data: dbGroups } = useGetUserGroupsQuery(currentUser.id, {
+    skip: !isAuthenticated || currentUser.id === "user-me",
+  });
 
-  // Lazy query for fetching direct conversation message history from DB
+  // Lazy queries for fetching message history from DB
   const [triggerGetMessages] = useLazyGetConversationMessagesQuery();
+  const [triggerGetGroupMessages] = useLazyGetGroupMessagesQuery();
   const [deleteMessageApi] = useDeleteMessageMutation();
 
   const contactsStorageKey = `messenger_contacts_${currentUser.id}`;
@@ -100,7 +121,19 @@ function MessengerContent() {
   const [hiddenContactIds, setHiddenContactIds] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Sync DB conversations into contacts list (excluding permanently hidden contacts)
+  // Auto-join socket rooms for all user groups
+  useEffect(() => {
+    if (dbGroups && dbGroups.length > 0) {
+      const socket = getSocket(API_URL);
+      if (socket.connected) {
+        for (const g of dbGroups) {
+          socket.emit("join-group", { groupId: g.id });
+        }
+      }
+    }
+  }, [dbGroups]);
+
+  // Sync DB conversations & Groups into contacts list
   useEffect(() => {
     let currentHidden = hiddenContactIds;
     try {
@@ -110,37 +143,70 @@ function MessengerContent() {
       }
     } catch (e) {}
 
-    if (dbConversations && dbConversations.length > 0) {
-      setContacts((prev) => {
-        const cleanPrev = prev.filter(
-          (c) => c.id !== currentUser.id && !currentHidden.includes(c.id)
-        );
-        const map = new Map<string, Contact>();
+    setContacts((prev) => {
+      const cleanPrev = prev.filter(
+        (c) => c.id !== currentUser.id && !currentHidden.includes(c.id)
+      );
+      const map = new Map<string, Contact>();
 
-        // Add DB conversations first, preserving local live unreadCount and socket messages
-        for (const dbContact of dbConversations) {
-          if (dbContact.id !== currentUser.id && !currentHidden.includes(dbContact.id)) {
-            const existingLocal = cleanPrev.find((c) => c.id === dbContact.id);
-            map.set(dbContact.id, {
-              ...dbContact,
-              unreadCount: existingLocal?.unreadCount !== undefined ? existingLocal.unreadCount : (dbContact.unreadCount || 0),
-              lastMessage: existingLocal?.lastMessage || dbContact.lastMessage,
-              lastMessageTime: existingLocal?.lastMessageTime || dbContact.lastMessageTime,
+      // 1. Add DB Groups first
+      if (dbGroups && dbGroups.length > 0) {
+        for (const g of dbGroups) {
+          if (!currentHidden.includes(g.id)) {
+            const existing = cleanPrev.find((c) => c.id === g.id);
+            map.set(g.id, {
+              id: g.id,
+              name: g.name,
+              avatar:
+                g.avatar ||
+                "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=250&q=80",
+              status: "online",
+              lastMessage: existing?.lastMessage || g.lastMessage || "Group created",
+              lastMessageTime: existing?.lastMessageTime || g.lastMessageTime || "Just now",
+              unreadCount:
+                existing?.unreadCount !== undefined
+                  ? existing.unreadCount
+                  : (g.unreadCount || 0),
+              isGroup: true,
+              memberCount: g.memberCount,
+              members: g.members,
+              description: g.description,
             });
           }
         }
-        // Retain local contacts if not present
-        for (const c of cleanPrev) {
-          if (!map.has(c.id) && !currentHidden.includes(c.id)) {
-            map.set(c.id, c);
+      }
+
+      // 2. Add 1-on-1 DB Conversations
+      if (dbConversations && dbConversations.length > 0) {
+        for (const dbContact of dbConversations) {
+          if (dbContact.id !== currentUser.id && !currentHidden.includes(dbContact.id)) {
+            if (!map.has(dbContact.id)) {
+              const existingLocal = cleanPrev.find((c) => c.id === dbContact.id);
+              map.set(dbContact.id, {
+                ...dbContact,
+                unreadCount:
+                  existingLocal?.unreadCount !== undefined
+                    ? existingLocal.unreadCount
+                    : (dbContact.unreadCount || 0),
+                lastMessage: existingLocal?.lastMessage || dbContact.lastMessage,
+                lastMessageTime: existingLocal?.lastMessageTime || dbContact.lastMessageTime,
+              });
+            }
           }
         }
-        return Array.from(map.values());
-      });
-    }
-  }, [dbConversations, currentUser.id, hiddenContactsStorageKey, hiddenContactIds]);
+      }
 
-  // Fetch conversation message history from PostgreSQL when active contact changes
+      // 3. Retain local contacts
+      for (const c of cleanPrev) {
+        if (!map.has(c.id) && !currentHidden.includes(c.id)) {
+          map.set(c.id, c);
+        }
+      }
+      return Array.from(map.values());
+    });
+  }, [dbGroups, dbConversations, currentUser.id, hiddenContactsStorageKey, hiddenContactIds]);
+
+  // Fetch message history from PostgreSQL when active contact changes (Direct vs Group)
   useEffect(() => {
     if (
       isAuthenticated &&
@@ -148,22 +214,44 @@ function MessengerContent() {
       activeContactId &&
       activeContactId !== currentUser.id
     ) {
-      triggerGetMessages({
-        user1Id: currentUser.id,
-        user2Id: activeContactId,
-      })
-        .unwrap()
-        .then((dbMsgs) => {
-          if (dbMsgs) {
-            setMessagesMap((prev) => ({
-              ...prev,
-              [activeContactId]: dbMsgs as Message[],
-            }));
-          }
+      const activeContact = contacts.find((c) => c.id === activeContactId);
+
+      if (activeContact?.isGroup) {
+        // Auto-join group room
+        const socket = getSocket(API_URL);
+        if (socket.connected) {
+          socket.emit("join-group", { groupId: activeContactId });
+        }
+
+        triggerGetGroupMessages(activeContactId)
+          .unwrap()
+          .then((groupMsgs) => {
+            if (groupMsgs) {
+              setMessagesMap((prev) => ({
+                ...prev,
+                [activeContactId]: groupMsgs as Message[],
+              }));
+            }
+          })
+          .catch((err) => console.error("Failed to load group messages:", err));
+      } else {
+        triggerGetMessages({
+          user1Id: currentUser.id,
+          user2Id: activeContactId,
         })
-        .catch((err) => console.error("Failed to load message history from DB:", err));
+          .unwrap()
+          .then((dbMsgs) => {
+            if (dbMsgs) {
+              setMessagesMap((prev) => ({
+                ...prev,
+                [activeContactId]: dbMsgs as Message[],
+              }));
+            }
+          })
+          .catch((err) => console.error("Failed to load message history from DB:", err));
+      }
     }
-  }, [activeContactId, currentUser.id, isAuthenticated, triggerGetMessages]);
+  }, [activeContactId, currentUser.id, isAuthenticated, triggerGetMessages, triggerGetGroupMessages, contacts]);
 
   // 1. Load persisted state from localStorage on mount / user change
   useEffect(() => {
@@ -479,13 +567,30 @@ function MessengerContent() {
         return [updatedTarget, ...remaining];
       });
 
-      setIsOtherTyping(false);
+      setTypingInfo(null);
     };
 
-    const handleUserTyping = (data: { senderId: string }) => {
-      if (data.senderId === activeContactIdRef.current) {
-        setIsOtherTyping(true);
-        setTimeout(() => setIsOtherTyping(false), 2500);
+    const handleUserTyping = (data: {
+      senderId: string;
+      senderName?: string;
+      groupId?: string;
+    }) => {
+      if (data.senderId === currentUser.id) return;
+
+      const currentActiveId = activeContactIdRef.current;
+      const isCurrentGroup = data.groupId && data.groupId === currentActiveId;
+      const isCurrentDirect = !data.groupId && data.senderId === currentActiveId;
+
+      if (isCurrentGroup || isCurrentDirect) {
+        setTypingInfo(data);
+
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+
+        typingTimeoutRef.current = setTimeout(() => {
+          setTypingInfo(null);
+        }, 2500);
       }
     };
 
@@ -571,10 +676,118 @@ function MessengerContent() {
       });
     };
 
+    const handleReceiveGroupMessage = (data: {
+      id: string;
+      groupId: string;
+      senderId: string;
+      senderName?: string;
+      senderAvatar?: string;
+      text: string;
+      timestamp: string;
+    }) => {
+      console.log("Received incoming group message:", data);
+
+      if (data.senderId !== currentUser.id) {
+        playNotificationSound();
+      }
+
+      const timestamp =
+        data.timestamp ||
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+      const isActive = activeContactIdRef.current === data.groupId;
+
+      const newMessage: Message = {
+        id: data.id,
+        groupId: data.groupId,
+        senderId: data.senderId,
+        senderName: data.senderName,
+        senderAvatar: data.senderAvatar,
+        text: data.text,
+        timestamp,
+        status: "delivered",
+        isGroup: true,
+      };
+
+      setMessagesMap((prev) => {
+        const existing = prev[data.groupId] || [];
+        if (existing.some((m) => m.id === data.id)) return prev;
+        return {
+          ...prev,
+          [data.groupId]: [...existing, newMessage],
+        };
+      });
+
+      setContacts((prev) => {
+        const target = prev.find((c) => c.id === data.groupId);
+        const remaining = prev.filter((c) => c.id !== data.groupId);
+
+        if (target) {
+          const updatedTarget: Contact = {
+            ...target,
+            lastMessage: `${data.senderName || "Member"}: ${data.text}`,
+            lastMessageTime: timestamp,
+            unreadCount: isActive ? 0 : (target.unreadCount || 0) + 1,
+          };
+          return [updatedTarget, ...remaining];
+        } else {
+          const newGroup: Contact = {
+            id: data.groupId,
+            name: "Group Chat",
+            avatar:
+              "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=250&q=80",
+            status: "online",
+            lastMessage: `${data.senderName || "Member"}: ${data.text}`,
+            lastMessageTime: timestamp,
+            unreadCount: isActive ? 0 : 1,
+            isGroup: true,
+          };
+          return [newGroup, ...prev];
+        }
+      });
+    };
+
+    const handleAddedToGroup = (group: any) => {
+      console.log("You were added to group:", group);
+      playNotificationSound();
+
+      const socket = getSocket(API_URL);
+      if (socket.connected) {
+        socket.emit("join-group", { groupId: group.id });
+      }
+
+      setContacts((prev) => {
+        const exists = prev.some((c) => c.id === group.id);
+        if (!exists) {
+          const groupContact: Contact = {
+            id: group.id,
+            name: group.name,
+            avatar:
+              group.avatar ||
+              "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=250&q=80",
+            status: "online",
+            lastMessage: "You were added to this group",
+            lastMessageTime: "Just now",
+            unreadCount: 1,
+            isGroup: true,
+            memberCount: group.memberCount || group.members?.length || 2,
+            members: group.members,
+          };
+          return [groupContact, ...prev];
+        }
+        return prev;
+      });
+    };
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("receiveMessage", handleReceiveMessage);
+    socket.on("receiveGroupMessage", handleReceiveGroupMessage);
+    socket.on("addedToGroup", handleAddedToGroup);
     socket.on("messageSent", handleMessageSent);
     socket.on("messagesRead", handleMessagesRead);
     socket.on("userTyping", handleUserTyping);
@@ -585,6 +798,8 @@ function MessengerContent() {
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
       socket.off("receiveMessage", handleReceiveMessage);
+      socket.off("receiveGroupMessage", handleReceiveGroupMessage);
+      socket.off("addedToGroup", handleAddedToGroup);
       socket.off("messageSent", handleMessageSent);
       socket.off("messagesRead", handleMessagesRead);
       socket.off("userTyping", handleUserTyping);
@@ -617,13 +832,19 @@ function MessengerContent() {
         minute: "2-digit",
       });
 
+      const activeContact = contacts.find((c) => c.id === activeContactId);
+
       const tempMessage: Message = {
         id: `temp-${crypto.randomUUID()}`,
         senderId: currentUser.id,
-        recipientId: activeContactId,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        recipientId: activeContact?.isGroup ? undefined : activeContactId,
+        groupId: activeContact?.isGroup ? activeContactId : undefined,
         text,
         timestamp,
         status: "sent",
+        isGroup: activeContact?.isGroup,
       };
 
       setMessagesMap((prev) => ({
@@ -639,7 +860,7 @@ function MessengerContent() {
         if (target) {
           const updatedTarget: Contact = {
             ...target,
-            lastMessage: text,
+            lastMessage: activeContact?.isGroup ? `${currentUser.name}: ${text}` : text,
             lastMessageTime: timestamp,
             unreadCount: 0,
           };
@@ -653,15 +874,23 @@ function MessengerContent() {
         socket.connect();
       }
 
-      socket.emit("sendMessage", {
-        senderId: currentUser.id,
-        senderName: currentUser.name,
-        senderAvatar: currentUser.avatar,
-        recipientId: activeContactId,
-        text,
-      });
+      if (activeContact?.isGroup) {
+        socket.emit("sendGroupMessage", {
+          groupId: activeContactId,
+          senderId: currentUser.id,
+          text,
+        });
+      } else {
+        socket.emit("sendMessage", {
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderAvatar: currentUser.avatar,
+          recipientId: activeContactId,
+          text,
+        });
+      }
     },
-    [activeContactId, currentUser.id, currentUser.name, currentUser.avatar, isAuthenticated]
+    [activeContactId, contacts, currentUser.id, currentUser.name, currentUser.avatar, isAuthenticated]
   );
 
   const handleDeleteMessage = useCallback(
@@ -701,16 +930,19 @@ function MessengerContent() {
     if (!isAuthenticated) return;
     const socket = getSocket(API_URL);
     if (socket.connected) {
+      const activeContact = contacts.find((c) => c.id === activeContactId);
       socket.emit("typing", {
         senderId: currentUser.id,
-        recipientId: activeContactId,
+        senderName: currentUser.name,
+        recipientId: activeContact?.isGroup ? undefined : activeContactId,
+        groupId: activeContact?.isGroup ? activeContactId : undefined,
       });
     }
-  }, [activeContactId, currentUser.id, isAuthenticated]);
+  }, [activeContactId, contacts, currentUser.id, currentUser.name, isAuthenticated]);
 
   const handleSelectContact = (id: string) => {
     dispatch(setActiveContactId(id));
-    setIsOtherTyping(false);
+    setTypingInfo(null);
     setIsMobileSidebarOpen(false);
     setContacts((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c))
@@ -802,6 +1034,7 @@ function MessengerContent() {
             onSelectContact={handleSelectContact}
             onDeleteContact={handleDeleteContact}
             onOpenNewChatModal={() => setIsNewChatModalOpen(true)}
+            onOpenCreateGroupModal={() => setIsCreateGroupModalOpen(true)}
             currentUser={currentUser}
           />
         </div>
@@ -812,12 +1045,17 @@ function MessengerContent() {
             activeContact={activeContact}
             messages={currentMessages}
             currentUserId={currentUser.id}
-            isTyping={isOtherTyping}
+            isTyping={Boolean(typingInfo)}
+            typingUserName={typingInfo?.senderName}
             onSendMessage={handleSendMessage}
             onTyping={handleTyping}
             isAuthenticated={isAuthenticated}
             onRequireAuth={() => setIsAuthModalOpen(true)}
             onDeleteMessage={handleDeleteMessage}
+            onDeleteContact={handleDeleteContact}
+            onOpenCreateGroupModal={() => setIsCreateGroupModalOpen(true)}
+            onOpenAddMemberModal={() => setIsAddMemberModalOpen(true)}
+            onOpenGroupMembersModal={() => setIsGroupMembersModalOpen(true)}
             onBack={() => dispatch(setActiveContactId(""))}
             onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
           />
@@ -840,6 +1078,10 @@ function MessengerContent() {
                   setIsMobileSidebarOpen(false);
                   setIsNewChatModalOpen(true);
                 }}
+                onOpenCreateGroupModal={() => {
+                  setIsMobileSidebarOpen(false);
+                  setIsCreateGroupModalOpen(true);
+                }}
                 onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
                 currentUser={currentUser}
               />
@@ -861,6 +1103,38 @@ function MessengerContent() {
         currentUserId={currentUser.id}
         onSelectUser={handleSelectNewChatUser}
       />
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={isCreateGroupModalOpen}
+        onClose={() => setIsCreateGroupModalOpen(false)}
+        currentUserId={currentUser.id}
+        onGroupCreated={(group) => {
+          dispatch(setActiveContactId(group.id));
+        }}
+      />
+
+      {/* Add Member to Group Modal */}
+      {activeContact?.isGroup && (
+        <AddMemberModal
+          isOpen={isAddMemberModalOpen}
+          onClose={() => setIsAddMemberModalOpen(false)}
+          groupId={activeContact.id}
+          groupName={activeContact.name}
+          existingMemberIds={activeContact.members?.map((m: any) => m.id) || [currentUser.id]}
+        />
+      )}
+
+      {/* View Group Members Modal */}
+      {activeContact?.isGroup && (
+        <GroupMembersModal
+          isOpen={isGroupMembersModalOpen}
+          onClose={() => setIsGroupMembersModalOpen(false)}
+          groupId={activeContact.id}
+          currentUserId={currentUser.id}
+          onOpenAddMemberModal={() => setIsAddMemberModalOpen(true)}
+        />
+      )}
     </div>
   );
 }
