@@ -35,8 +35,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredContacts = contacts.filter((contact) =>
-    contact.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredContacts = contacts.filter(
+    (contact) =>
+      contact.id !== currentUser.id &&
+      contact.name?.toLowerCase() !== currentUser.name?.toLowerCase() &&
+      contact.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -98,7 +101,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       <div className="px-4 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
         <span>Direct Messages</span>
         <span className="bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
-          {contacts.length}
+          {filteredContacts.length}
         </span>
       </div>
 

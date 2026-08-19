@@ -29,6 +29,8 @@ interface ChatWindowProps {
   isTyping: boolean;
   onSendMessage: (text: string) => void;
   onTyping?: () => void;
+  isAuthenticated?: boolean;
+  onRequireAuth?: () => void;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -38,6 +40,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   isTyping,
   onSendMessage,
   onTyping,
+  isAuthenticated = true,
+  onRequireAuth,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -178,7 +182,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Message Input */}
-      <MessageInput onSendMessage={onSendMessage} onTyping={onTyping} />
+      <MessageInput
+        onSendMessage={onSendMessage}
+        onTyping={onTyping}
+        isAuthenticated={isAuthenticated}
+        onRequireAuth={onRequireAuth}
+      />
     </div>
   );
 };

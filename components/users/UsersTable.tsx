@@ -2,12 +2,19 @@
 
 import React from "react";
 import { useGetUsersQuery } from "@/redux/api/usersApi";
+import { useAppSelector } from "@/redux/hooks";
 import { useRouter } from "next/navigation";
 import { MessageSquare, UserCheck, Mail, Calendar, Loader2, ArrowLeft } from "lucide-react";
 
 export const UsersTable: React.FC = () => {
   const router = useRouter();
+  const { user: authUser } = useAppSelector((state) => state.auth);
   const { data: users, isLoading, error, refetch } = useGetUsersQuery();
+
+  const displayUsers = users?.filter(
+    (u: any) =>
+      u.id !== authUser?.id && u.email?.toLowerCase() !== authUser?.email?.toLowerCase()
+  );
 
   const handleMessageUser = (user: any) => {
     // Navigate to homepage with chatWith query param
@@ -78,8 +85,8 @@ export const UsersTable: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm">
-                {users && users.length > 0 ? (
-                  users.map((user: any) => (
+                {displayUsers && displayUsers.length > 0 ? (
+                  displayUsers.map((user: any) => (
                     <tr
                       key={user.id}
                       className="hover:bg-slate-800/50 transition-colors"

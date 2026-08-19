@@ -63,8 +63,11 @@ function MessengerContent() {
       const savedActive = localStorage.getItem(activeStorageKey);
 
       if (savedContacts) {
-        const parsed = JSON.parse(savedContacts);
-        setContacts(parsed);
+        const parsed: Contact[] = JSON.parse(savedContacts);
+        const cleanContacts = parsed.filter(
+          (c) => c.id !== currentUser.id && c.name?.toLowerCase() !== currentUser.name?.toLowerCase()
+        );
+        setContacts(cleanContacts);
       } else {
         setContacts([]);
       }
@@ -76,7 +79,7 @@ function MessengerContent() {
         setMessagesMap({});
       }
 
-      if (savedActive) {
+      if (savedActive && savedActive !== currentUser.id) {
         dispatch(setActiveContactId(savedActive));
       }
     } catch (e) {
@@ -84,7 +87,7 @@ function MessengerContent() {
     } finally {
       setIsInitialized(true);
     }
-  }, [currentUser.id, contactsStorageKey, messagesStorageKey, activeStorageKey, dispatch]);
+  }, [currentUser.id, currentUser.name, contactsStorageKey, messagesStorageKey, activeStorageKey, dispatch]);
 
   // 2. Persist state changes to localStorage
   useEffect(() => {
@@ -121,7 +124,7 @@ function MessengerContent() {
     const chatWith = searchParams.get("chatWith");
     const rawUserData = searchParams.get("userData");
 
-    if (chatWith) {
+    if (chatWith && chatWith !== currentUser.id) {
       let targetUser = {
         id: chatWith,
         name: "User",
@@ -133,6 +136,7 @@ function MessengerContent() {
       if (rawUserData) {
         try {
           const parsed = JSON.parse(decodeURIComponent(rawUserData));
+          if (parsed.id === currentUser.id) return;
           targetUser = {
             id: parsed.id,
             name: parsed.name,
@@ -148,8 +152,9 @@ function MessengerContent() {
 
       // Add selected user from /users table to top of sidebar
       setContacts((prev) => {
-        const target = prev.find((c) => c.id === targetUser.id);
-        const remaining = prev.filter((c) => c.id !== targetUser.id);
+        const cleanPrev = prev.filter((c) => c.id !== currentUser.id);
+        const target = cleanPrev.find((c) => c.id === targetUser.id);
+        const remaining = cleanPrev.filter((c) => c.id !== targetUser.id);
 
         if (target) {
           return [target, ...remaining];
@@ -170,7 +175,7 @@ function MessengerContent() {
 
       dispatch(setActiveContactId(targetUser.id));
     }
-  }, [searchParams, dispatch]);
+  }, [searchParams, currentUser.id, dispatch]);
 
   // 4. Initialize Socket Connection & Event Handlers
   useEffect(() => {
@@ -301,6 +306,11 @@ function MessengerContent() {
   // Send message and bump active conversation to the top of the sidebar
   const handleSendMessage = useCallback(
     (text: string) => {
+      if (!isAuthenticated) {
+        setIsAuthModalOpen(true);
+        return;
+      }
+
       const socket = getSocket(API_URL);
 
       const timestamp = new Date().toLocaleTimeString([], {
@@ -350,10 +360,11 @@ function MessengerContent() {
         });
       }
     },
-    [activeContactId, currentUser.id, currentUser.name, currentUser.avatar]
+    [activeContactId, currentUser.id, currentUser.name, currentUser.avatar, isAuthenticated]
   );
 
   const handleTyping = useCallback(() => {
+    if (!isAuthenticated) return;
     const socket = getSocket(API_URL);
     if (socket.connected) {
       socket.emit("typing", {
@@ -361,7 +372,7 @@ function MessengerContent() {
         recipientId: activeContactId,
       });
     }
-  }, [activeContactId, currentUser.id]);
+  }, [activeContactId, currentUser.id, isAuthenticated]);
 
   const handleSelectContact = (id: string) => {
     dispatch(setActiveContactId(id));
@@ -436,6 +447,8 @@ function MessengerContent() {
           isTyping={isOtherTyping}
           onSendMessage={handleSendMessage}
           onTyping={handleTyping}
+          isAuthenticated={isAuthenticated}
+          onRequireAuth={() => setIsAuthModalOpen(false || true)}
         />
       </div>
 
