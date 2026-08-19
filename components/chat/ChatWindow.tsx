@@ -13,6 +13,8 @@ import {
   MoreVertical,
   Shield,
   Trash2,
+  ArrowLeft,
+  Menu,
 } from "lucide-react";
 
 export interface Message {
@@ -34,6 +36,8 @@ interface ChatWindowProps {
   isAuthenticated?: boolean;
   onRequireAuth?: () => void;
   onDeleteMessage?: (messageId: string, mode: "everyone" | "me") => void;
+  onBack?: () => void;
+  onToggleMobileSidebar?: () => void;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -46,6 +50,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   isAuthenticated = true,
   onRequireAuth,
   onDeleteMessage,
+  onBack,
+  onToggleMobileSidebar,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
@@ -60,7 +66,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   if (!activeContact) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-400 p-8 text-center select-none">
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-400 p-8 text-center select-none h-full">
         <div className="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center mb-4 border border-slate-800 text-indigo-400">
           <Shield className="w-8 h-8" />
         </div>
@@ -70,20 +76,53 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         <p className="text-sm text-slate-500 max-w-sm">
           Choose a contact from the sidebar to start chatting over real-time WebSockets.
         </p>
+
+        {onToggleMobileSidebar && (
+          <button
+            onClick={onToggleMobileSidebar}
+            className="md:hidden mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md transition-all"
+          >
+            <Menu className="w-4 h-4" />
+            <span>Open Conversations List</span>
+          </button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 h-full overflow-hidden">
+    <div className="flex-1 flex flex-col bg-slate-950 h-full overflow-hidden w-full">
       {/* Header */}
-      <div className="p-3.5 px-6 bg-slate-900 border-b border-slate-800 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      <div className="p-3.5 px-4 md:px-6 bg-slate-900 border-b border-slate-800 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          {onToggleMobileSidebar && (
+            <button
+              type="button"
+              onClick={onToggleMobileSidebar}
+              title="Toggle conversations menu"
+              className="md:hidden p-1.5 px-2.5 text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1 border border-slate-700 text-xs font-semibold"
+            >
+              <Menu className="w-4 h-4 text-indigo-400" />
+              <span>Chats</span>
+            </button>
+          )}
+
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              title="Back to conversations"
+              className="hidden md:hidden p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+
+          <div className="relative flex-shrink-0">
             <img
               src={activeContact.avatar}
               alt={activeContact.name}
-              className="w-10 h-10 rounded-full object-cover"
+              className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover"
             />
             <span
               className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
@@ -95,11 +134,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               }`}
             />
           </div>
-          <div>
-            <h2 className="font-semibold text-slate-100 text-sm leading-snug">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-slate-100 text-sm leading-snug truncate">
               {activeContact.name}
             </h2>
-            <p className="text-xs text-slate-400 flex items-center gap-1.5">
+            <p className="text-xs text-slate-400 flex items-center gap-1.5 truncate">
               {activeContact.status === "online" ? (
                 <span className="text-emerald-400 font-medium">Online</span>
               ) : (
@@ -110,7 +149,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1 text-slate-400">
+        <div className="flex items-center gap-0.5 md:gap-1 text-slate-400 flex-shrink-0">
           <button className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors">
             <Phone className="w-4 h-4" />
           </button>
@@ -124,9 +163,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Message Stream */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 custom-scrollbar">
         <div className="flex justify-center my-2">
-          <span className="text-[11px] bg-slate-900/90 text-slate-400 px-3 py-1 rounded-full border border-slate-800/80 shadow-inner">
+          <span className="text-[10px] md:text-[11px] bg-slate-900/90 text-slate-400 px-3 py-1 rounded-full border border-slate-800/80 shadow-inner text-center">
             Encrypted with Socket.io End-to-End Channel
           </span>
         </div>
@@ -138,7 +177,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               key={msg.id}
               className={`group flex flex-col ${isMe ? "items-end" : "items-start"}`}
             >
-              <div className="relative flex items-center gap-2 max-w-[75%] md:max-w-[65%]">
+              <div className="relative flex items-center gap-2 max-w-[85%] sm:max-w-[75%] md:max-w-[65%]">
                 {/* Delete trigger button */}
                 <button
                   onClick={() => setDeletingMessage(msg)}

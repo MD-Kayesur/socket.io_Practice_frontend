@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, MoreVertical, Users, MessageSquarePlus, Trash2, Plus } from "lucide-react";
+import { Search, MoreVertical, Users, MessageSquarePlus, Trash2, Plus, X } from "lucide-react";
 
 export interface Contact {
   id: string;
@@ -20,6 +20,7 @@ interface ChatSidebarProps {
   onSelectContact: (id: string) => void;
   onDeleteContact?: (id: string) => void;
   onOpenNewChatModal?: () => void;
+  onCloseMobileSidebar?: () => void;
   currentUser: {
     id: string;
     name: string;
@@ -34,6 +35,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onSelectContact,
   onDeleteContact,
   onOpenNewChatModal,
+  onCloseMobileSidebar,
   currentUser,
 }) => {
   const router = useRouter();
@@ -47,11 +49,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   );
 
   return (
-    <div className="w-80 md:w-96 flex flex-col bg-slate-900 border-r border-slate-800 h-full select-none">
+    <div className="w-full md:w-80 lg:w-96 flex flex-col bg-slate-900 border-r border-slate-800 h-full select-none flex-shrink-0">
       {/* Header */}
       <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative flex-shrink-0">
             <img
               src={currentUser.avatar}
               alt={currentUser.name}
@@ -60,15 +62,15 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-slate-900" />
           </div>
 
-          <div>
-            <h2 className="font-semibold text-slate-100 text-sm">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-slate-100 text-sm truncate">
               {currentUser.name}
             </h2>
             <p className="text-xs text-emerald-400">Active Now</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
             type="button"
             onClick={onOpenNewChatModal}
@@ -76,7 +78,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New Chat</span>
+            <span className="hidden sm:inline">New Chat</span>
           </button>
           <button
             type="button"
@@ -85,8 +87,18 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition-all"
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Users</span>
+            <span className="hidden sm:inline">Users</span>
           </button>
+          {onCloseMobileSidebar && (
+            <button
+              type="button"
+              onClick={onCloseMobileSidebar}
+              title="Close menu"
+              className="md:hidden p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 

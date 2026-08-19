@@ -30,6 +30,7 @@ function MessengerContent() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Keep ref of activeContactId so socket listener always checks latest active chat
   const activeContactIdRef = useRef(activeContactId);
@@ -613,6 +614,7 @@ function MessengerContent() {
   const handleSelectContact = (id: string) => {
     dispatch(setActiveContactId(id));
     setIsOtherTyping(false);
+    setIsMobileSidebarOpen(false);
     setContacts((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c))
     );
@@ -694,27 +696,59 @@ function MessengerContent() {
       </div>
 
       {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        <ChatSidebar
-          contacts={contacts}
-          activeContactId={activeContactId}
-          onSelectContact={handleSelectContact}
-          onDeleteContact={handleDeleteContact}
-          onOpenNewChatModal={() => setIsNewChatModalOpen(true)}
-          currentUser={currentUser}
-        />
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Desktop Sidebar (hidden on mobile, visible on md screens) */}
+        <div className="hidden md:flex h-full w-80 lg:w-96 flex-shrink-0">
+          <ChatSidebar
+            contacts={contacts}
+            activeContactId={activeContactId}
+            onSelectContact={handleSelectContact}
+            onDeleteContact={handleDeleteContact}
+            onOpenNewChatModal={() => setIsNewChatModalOpen(true)}
+            currentUser={currentUser}
+          />
+        </div>
 
-        <ChatWindow
-          activeContact={activeContact}
-          messages={currentMessages}
-          currentUserId={currentUser.id}
-          isTyping={isOtherTyping}
-          onSendMessage={handleSendMessage}
-          onTyping={handleTyping}
-          isAuthenticated={isAuthenticated}
-          onRequireAuth={() => setIsAuthModalOpen(false || true)}
-          onDeleteMessage={handleDeleteMessage}
-        />
+        {/* Primary Chat Window */}
+        <div className="h-full w-full flex-1 flex">
+          <ChatWindow
+            activeContact={activeContact}
+            messages={currentMessages}
+            currentUserId={currentUser.id}
+            isTyping={isOtherTyping}
+            onSendMessage={handleSendMessage}
+            onTyping={handleTyping}
+            isAuthenticated={isAuthenticated}
+            onRequireAuth={() => setIsAuthModalOpen(true)}
+            onDeleteMessage={handleDeleteMessage}
+            onBack={() => dispatch(setActiveContactId(""))}
+            onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+          />
+        </div>
+
+        {/* Mobile Slide-Over Sidebar Menu Drawer */}
+        {isMobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            <div
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+            <div className="relative z-50 w-[85%] max-w-sm h-full bg-slate-900 shadow-2xl animate-in slide-in-from-left duration-200">
+              <ChatSidebar
+                contacts={contacts}
+                activeContactId={activeContactId}
+                onSelectContact={handleSelectContact}
+                onDeleteContact={handleDeleteContact}
+                onOpenNewChatModal={() => {
+                  setIsMobileSidebarOpen(false);
+                  setIsNewChatModalOpen(true);
+                }}
+                onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
+                currentUser={currentUser}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Redux Auth Modal */}
