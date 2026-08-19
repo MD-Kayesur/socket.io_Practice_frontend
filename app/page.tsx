@@ -11,6 +11,11 @@ import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { setActiveContactId, setSocketStatus } from "@/redux/slices/chatSlice";
 import { logout, setUser } from "@/redux/slices/authSlice";
 import { useGetMeQuery } from "@/redux/api/authApi";
+import {
+  useGetUserConversationsQuery,
+  useLazyGetConversationMessagesQuery,
+  useDeleteMessageMutation,
+} from "@/redux/api/messagesApi";
 import { LogIn, LogOut, User as UserIcon, Users } from "lucide-react";
 import Link from "next/link";
 
@@ -47,6 +52,15 @@ function MessengerContent() {
     [authUser]
   );
 
+  // Fetch database conversations for current user
+  const { data: dbConversations } = useGetUserConversationsQuery(currentUser.id, {
+    skip: !isAuthenticated || currentUser.id === "user-me",
+  });
+
+  // Lazy query for fetching direct conversation message history from DB
+  const [triggerGetMessages] = useLazyGetConversationMessagesQuery();
+  const [deleteMessageApi] = useDeleteMessageMutation();
+
   const contactsStorageKey = `messenger_contacts_${currentUser.id}`;
   const messagesStorageKey = `messenger_messages_${currentUser.id}`;
   const activeStorageKey = `messenger_active_${currentUser.id}`;
@@ -54,6 +68,55 @@ function MessengerContent() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Sync DB conversations into contacts list
+  useEffect(() => {
+    if (dbConversations && dbConversations.length > 0) {
+      setContacts((prev) => {
+        const cleanPrev = prev.filter((c) => c.id !== currentUser.id);
+        const map = new Map<string, Contact>();
+
+        // Add DB conversations first
+        for (const dbContact of dbConversations) {
+          if (dbContact.id !== currentUser.id) {
+            map.set(dbContact.id, dbContact);
+          }
+        }
+        // Retain local contacts if not present
+        for (const c of cleanPrev) {
+          if (!map.has(c.id)) {
+            map.set(c.id, c);
+          }
+        }
+        return Array.from(map.values());
+      });
+    }
+  }, [dbConversations, currentUser.id]);
+
+  // Fetch conversation message history from PostgreSQL when active contact changes
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      currentUser.id !== "user-me" &&
+      activeContactId &&
+      activeContactId !== currentUser.id
+    ) {
+      triggerGetMessages({
+        user1Id: currentUser.id,
+        user2Id: activeContactId,
+      })
+        .unwrap()
+        .then((dbMsgs) => {
+          if (dbMsgs) {
+            setMessagesMap((prev) => ({
+              ...prev,
+              [activeContactId]: dbMsgs as Message[],
+            }));
+          }
+        })
+        .catch((err) => console.error("Failed to load message history from DB:", err));
+    }
+  }, [activeContactId, currentUser.id, isAuthenticated, triggerGetMessages]);
 
   // 1. Load persisted state from localStorage on mount / user change
   useEffect(() => {
@@ -281,11 +344,23 @@ function MessengerContent() {
       }
     };
 
+    const handleMessageDeleted = (data: { messageId: string; mode: string }) => {
+      console.log("Real-time message deleted event:", data);
+      setMessagesMap((prev) => {
+        const updated: Record<string, Message[]> = {};
+        for (const key of Object.keys(prev)) {
+          updated[key] = prev[key].filter((m) => m.id !== data.messageId);
+        }
+        return updated;
+      });
+    };
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("userTyping", handleUserTyping);
+    socket.on("messageDeleted", handleMessageDeleted);
 
     return () => {
       socket.off("connect", handleConnect);
@@ -293,6 +368,7 @@ function MessengerContent() {
       socket.off("connect_error", handleConnectError);
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("userTyping", handleUserTyping);
+      socket.off("messageDeleted", handleMessageDeleted);
     };
   }, [currentUser.id, activeContactId, dispatch]);
 
@@ -361,6 +437,39 @@ function MessengerContent() {
       }
     },
     [activeContactId, currentUser.id, currentUser.name, currentUser.avatar, isAuthenticated]
+  );
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string, mode: "everyone" | "me") => {
+      // 1. Remove from local state immediately for instant feedback
+      setMessagesMap((prev) => ({
+        ...prev,
+        [activeContactId]: (prev[activeContactId] || []).filter((m) => m.id !== messageId),
+      }));
+
+      // 2. Broadcast socket deleteMessage event
+      const socket = getSocket(API_URL);
+      if (socket.connected) {
+        socket.emit("deleteMessage", {
+          messageId,
+          userId: currentUser.id,
+          recipientId: activeContactId,
+          mode,
+        });
+      }
+
+      // 3. Persist deletion in DB via REST API
+      try {
+        await deleteMessageApi({
+          messageId,
+          userId: currentUser.id,
+          mode,
+        }).unwrap();
+      } catch (err) {
+        console.error("Failed to delete message via DB API:", err);
+      }
+    },
+    [activeContactId, currentUser.id, deleteMessageApi]
   );
 
   const handleTyping = useCallback(() => {
@@ -449,6 +558,7 @@ function MessengerContent() {
           onTyping={handleTyping}
           isAuthenticated={isAuthenticated}
           onRequireAuth={() => setIsAuthModalOpen(false || true)}
+          onDeleteMessage={handleDeleteMessage}
         />
       </div>
 

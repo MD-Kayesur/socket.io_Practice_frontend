@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { Contact } from "./ChatSidebar";
 import { MessageInput } from "./MessageInput";
+import { DeleteMessageModal } from "./DeleteMessageModal";
 import {
   Phone,
   Video,
@@ -11,6 +12,7 @@ import {
   CheckCheck,
   MoreVertical,
   Shield,
+  Trash2,
 } from "lucide-react";
 
 export interface Message {
@@ -31,6 +33,7 @@ interface ChatWindowProps {
   onTyping?: () => void;
   isAuthenticated?: boolean;
   onRequireAuth?: () => void;
+  onDeleteMessage?: (messageId: string, mode: "everyone" | "me") => void;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -42,8 +45,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   onTyping,
   isAuthenticated = true,
   onRequireAuth,
+  onDeleteMessage,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -131,33 +136,46 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           return (
             <div
               key={msg.id}
-              className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
+              className={`group flex flex-col ${isMe ? "items-end" : "items-start"}`}
             >
-              <div
-                className={`max-w-[75%] md:max-w-[65%] px-4 py-2.5 rounded-2xl shadow-sm text-sm ${
-                  isMe
-                    ? "bg-indigo-600 text-white rounded-br-none"
-                    : "bg-slate-800/90 text-slate-100 rounded-bl-none border border-slate-700/50"
-                }`}
-              >
-                <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                <div
-                  className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${
-                    isMe ? "text-indigo-200" : "text-slate-400"
+              <div className="relative flex items-center gap-2 max-w-[75%] md:max-w-[65%]">
+                {/* Delete trigger button */}
+                <button
+                  onClick={() => setDeletingMessage(msg)}
+                  title="Delete message"
+                  className={`opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-full transition-all ${
+                    isMe ? "order-first" : "order-last"
                   }`}
                 >
-                  <span>{msg.timestamp}</span>
-                  {isMe && (
-                    <span>
-                      {msg.status === "read" ? (
-                        <CheckCheck className="w-3 h-3 text-sky-300" />
-                      ) : msg.status === "delivered" ? (
-                        <CheckCheck className="w-3 h-3 text-indigo-200" />
-                      ) : (
-                        <Check className="w-3 h-3 text-indigo-200" />
-                      )}
-                    </span>
-                  )}
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+
+                <div
+                  className={`w-full px-4 py-2.5 rounded-2xl shadow-sm text-sm ${
+                    isMe
+                      ? "bg-indigo-600 text-white rounded-br-none"
+                      : "bg-slate-800/90 text-slate-100 rounded-bl-none border border-slate-700/50"
+                  }`}
+                >
+                  <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  <div
+                    className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${
+                      isMe ? "text-indigo-200" : "text-slate-400"
+                    }`}
+                  >
+                    <span>{msg.timestamp}</span>
+                    {isMe && (
+                      <span>
+                        {msg.status === "read" ? (
+                          <CheckCheck className="w-3 h-3 text-sky-300" />
+                        ) : msg.status === "delivered" ? (
+                          <CheckCheck className="w-3 h-3 text-indigo-200" />
+                        ) : (
+                          <Check className="w-3 h-3 text-indigo-200" />
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -187,6 +205,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         onTyping={onTyping}
         isAuthenticated={isAuthenticated}
         onRequireAuth={onRequireAuth}
+      />
+
+      {/* Delete Modal */}
+      <DeleteMessageModal
+        isOpen={Boolean(deletingMessage)}
+        onClose={() => setDeletingMessage(null)}
+        isSender={deletingMessage?.senderId === currentUserId}
+        onConfirm={(mode) => {
+          if (deletingMessage) {
+            onDeleteMessage?.(deletingMessage.id, mode);
+          }
+        }}
       />
     </div>
   );
