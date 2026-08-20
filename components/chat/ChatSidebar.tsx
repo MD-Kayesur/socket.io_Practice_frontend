@@ -63,16 +63,15 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative flex-shrink-0">
             <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-indigo-500/40"
+              src="/Screenshot_2026-08-19_at_11.41.20_AM-removebg-preview.png"
+              alt="App Logo"
+              className="w-10 h-10 object-contain drop-shadow-md"
             />
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-slate-900" />
           </div>
 
           <div className="min-w-0">
-            <h2 className="font-semibold text-slate-100 text-sm truncate">
-              {currentUser.name}
+            <h2 className="font-semibold text-slate-100 text-sm truncate flex items-center gap-1.5">
+              <span>{currentUser.name}</span>
             </h2>
             <p className="text-xs text-emerald-400">Active Now</p>
           </div>

@@ -17,7 +17,7 @@ export const SocketStatusBadge: React.FC<
   onReconnect,
 }) => {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 text-xs">
+    <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl text-xs">
       <div className="flex items-center gap-2.5">
         <div className="relative flex items-center justify-center">
           {status === "connected" && (

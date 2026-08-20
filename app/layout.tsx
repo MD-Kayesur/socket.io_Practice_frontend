@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Realtime Messenger | Socket.io & RTK Query",
   description: "Modern real-time chat powered by Next.js, Redux Toolkit, and Socket.io",
+  icons: {
+    icon: "/Screenshot_2026-08-19_at_11.41.20_AM-removebg-preview.png",
+    shortcut: "/Screenshot_2026-08-19_at_11.41.20_AM-removebg-preview.png",
+    apple: "/Screenshot_2026-08-19_at_11.41.20_AM-removebg-preview.png",
+  },
 };
 
 export default function RootLayout({

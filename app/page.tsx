@@ -1008,12 +1008,19 @@ function MessengerContent() {
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Top Socket & Redux Auth Status Bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-1.5">
-        <SocketStatusBadge
-          status={socketStatus}
-          serverUrl={API_URL}
-          onReconnect={handleReconnect}
-        />
+      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-2">
+        <div className="flex items-center gap-3">
+          <img
+            src="/Screenshot_2026-08-19_at_11.42.59_AM-removebg-preview.png"
+            alt="Navbar Logo"
+            className="h-8 md:h-9 w-auto object-contain drop-shadow"
+          />
+          <SocketStatusBadge
+            status={socketStatus}
+            serverUrl={API_URL}
+            onReconnect={handleReconnect}
+          />
+        </div>
 
         <div className="flex items-center gap-3 text-xs">
           {isAuthenticated ? (
