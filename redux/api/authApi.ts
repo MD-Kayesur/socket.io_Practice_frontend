@@ -25,6 +25,13 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface GoogleAuthRequest {
+  name: string;
+  email: string;
+  avatar?: string;
+  googleUid?: string;
+}
+
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     signup: builder.mutation<AuthResponse, SignupRequest>({
@@ -43,6 +50,14 @@ export const authApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["User"],
     }),
+    googleAuth: builder.mutation<AuthResponse, GoogleAuthRequest>({
+      query: (body) => ({
+        url: "/auth/google",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["User"],
+    }),
     getMe: builder.query<{ user: User }, void>({
       query: () => "/auth/me",
       providesTags: ["User"],
@@ -50,4 +65,9 @@ export const authApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useSignupMutation, useLoginMutation, useGetMeQuery } = authApi;
+export const {
+  useSignupMutation,
+  useLoginMutation,
+  useGoogleAuthMutation,
+  useGetMeQuery,
+} = authApi;
