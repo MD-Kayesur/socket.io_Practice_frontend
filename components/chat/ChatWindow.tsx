@@ -49,6 +49,8 @@ interface ChatWindowProps {
   onOpenCreateGroupModal?: () => void;
   onOpenAddMemberModal?: () => void;
   onOpenGroupMembersModal?: () => void;
+  onStartAudioCall?: () => void;
+  onStartVideoCall?: () => void;
   onBack?: () => void;
   onToggleMobileSidebar?: () => void;
 }
@@ -69,6 +71,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   onOpenCreateGroupModal,
   onOpenAddMemberModal,
   onOpenGroupMembersModal,
+  onStartAudioCall,
+  onStartVideoCall,
   onBack,
   onToggleMobileSidebar,
 }) => {
@@ -210,10 +214,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               <span className="hidden sm:inline">Add Member</span>
             </button>
           )}
-          <button className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors">
+          <button
+            onClick={onStartAudioCall}
+            title="Start Audio Call"
+            className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
+          >
             <Phone className="w-4 h-4" />
           </button>
-          <button className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors">
+          <button
+            onClick={onStartVideoCall}
+            title="Start Video Call"
+            className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
+          >
             <Video className="w-4 h-4" />
           </button>
           {/* Info & Options Popover Menu Button */}
