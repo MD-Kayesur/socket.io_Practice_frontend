@@ -10,6 +10,9 @@ import { NewConversationModal } from "@/components/chat/NewConversationModal";
 import { CreateGroupModal } from "@/components/chat/CreateGroupModal";
 import { AddMemberModal } from "@/components/chat/AddMemberModal";
 import { GroupMembersModal } from "@/components/chat/GroupMembersModal";
+import { IncomingCallModal } from "@/components/call/IncomingCallModal";
+import { VideoCallOverlay } from "@/components/call/VideoCallOverlay";
+import { useWebRTC } from "@/hooks/useWebRTC";
 import { getSocket } from "@/lib/socket";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { setActiveContactId, setSocketStatus } from "@/redux/slices/chatSlice";
@@ -98,6 +101,25 @@ function MessengerContent() {
     }),
     [authUser]
   );
+
+  // WebRTC Live Audio & Video Calling Hook
+  const {
+    callState,
+    callType,
+    peerInfo,
+    incomingCall,
+    isMuted,
+    isVideoOff,
+    callDuration,
+    localVideoRef,
+    remoteVideoRef,
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    toggleMute,
+    toggleVideo,
+  } = useWebRTC(currentUser.id, currentUser.name, currentUser.avatar);
 
   // Fetch database 1-on-1 conversations and groups for current user
   const { data: dbConversations } = useGetUserConversationsQuery(currentUser.id, {
@@ -1089,6 +1111,16 @@ function MessengerContent() {
             onOpenCreateGroupModal={() => setIsCreateGroupModalOpen(true)}
             onOpenAddMemberModal={() => setIsAddMemberModalOpen(true)}
             onOpenGroupMembersModal={() => setIsGroupMembersModalOpen(true)}
+            onStartAudioCall={() => {
+              if (activeContact && !activeContact.isGroup) {
+                startCall(activeContact, "audio");
+              }
+            }}
+            onStartVideoCall={() => {
+              if (activeContact && !activeContact.isGroup) {
+                startCall(activeContact, "video");
+              }
+            }}
             onBack={() => dispatch(setActiveContactId(""))}
             onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
           />
@@ -1168,6 +1200,28 @@ function MessengerContent() {
           onOpenAddMemberModal={() => setIsAddMemberModalOpen(true)}
         />
       )}
+
+      {/* Incoming WebRTC Call Dialog */}
+      <IncomingCallModal
+        incomingCall={incomingCall}
+        onAccept={acceptCall}
+        onReject={rejectCall}
+      />
+
+      {/* Active WebRTC Call Overlay */}
+      <VideoCallOverlay
+        callState={callState}
+        callType={callType}
+        peerInfo={peerInfo}
+        isMuted={isMuted}
+        isVideoOff={isVideoOff}
+        callDuration={callDuration}
+        localVideoRef={localVideoRef}
+        remoteVideoRef={remoteVideoRef}
+        onEndCall={endCall}
+        onToggleMute={toggleMute}
+        onToggleVideo={toggleVideo}
+      />
     </div>
   );
 }
