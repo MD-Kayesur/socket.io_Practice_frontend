@@ -143,6 +143,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let lastUpdateTime = 0;
         const checkVolume = () => {
           if (!analyser) return;
           analyser.getByteFrequencyData(dataArray);
@@ -151,8 +152,12 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
             sum += dataArray[i];
           }
           const average = sum / dataArray.length;
-          setIsLocalSpeaking(average > 8);
-          setLocalVolumeLevel(Math.min(100, Math.round(average * 2.2)));
+          const now = performance.now();
+          if (now - lastUpdateTime > 80) {
+            lastUpdateTime = now;
+            setIsLocalSpeaking(average > 8);
+            setLocalVolumeLevel(Math.min(100, Math.round(average * 2.2)));
+          }
           animId = requestAnimationFrame(checkVolume);
         };
         checkVolume();
@@ -208,6 +213,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let lastRemoteUpdate = 0;
         const checkVolume = () => {
           if (!analyser) return;
           analyser.getByteFrequencyData(dataArray);
@@ -216,7 +222,11 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
             sum += dataArray[i];
           }
           const average = sum / dataArray.length;
-          setIsRemoteSpeaking(average > 8);
+          const now = performance.now();
+          if (now - lastRemoteUpdate > 100) {
+            lastRemoteUpdate = now;
+            setIsRemoteSpeaking(average > 8);
+          }
           animId = requestAnimationFrame(checkVolume);
         };
         checkVolume();

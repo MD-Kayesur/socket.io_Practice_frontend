@@ -113,17 +113,29 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
     pc.ontrack = (event) => {
       console.log("WebRTC received remote track:", event.track.kind, event.track.id);
+      event.track.enabled = true;
+
       let stream = remoteStreamRef.current;
-      if (event.streams && event.streams[0]) {
-        stream = event.streams[0];
-      } else {
-        if (!stream) {
-          stream = new MediaStream();
-        }
+      if (!stream) {
+        stream = new MediaStream();
+        remoteStreamRef.current = stream;
+      }
+
+      // Add the incoming track if not already in the stream
+      if (!stream.getTracks().some((t) => t.id === event.track.id)) {
         stream.addTrack(event.track);
       }
 
-      remoteStreamRef.current = stream;
+      // Also merge any tracks present in event.streams[0]
+      if (event.streams && event.streams[0]) {
+        event.streams[0].getTracks().forEach((t) => {
+          t.enabled = true;
+          if (!stream!.getTracks().some((st) => st.id === t.id)) {
+            stream!.addTrack(t);
+          }
+        });
+      }
+
       setRemoteStream(stream);
 
       if (event.track.kind === "video") {
@@ -240,6 +252,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
           pc.addTrack(track, stream);
         });
 
+        pc.getTransceivers().forEach((t) => {
+          t.direction = "sendrecv";
+        });
+
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
@@ -296,10 +312,18 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       // 3. Acquire local mic / camera
       const stream = await getUserMedia(incomingCall.callType);
 
-      // 4. Add tracks directly into the matched transceivers
+      // 4. Bind local tracks explicitly into the matched transceivers
       stream.getTracks().forEach((track) => {
         track.enabled = true;
-        pc.addTrack(track, stream);
+        const matchingTransceiver = pc.getTransceivers().find(
+          (t) => t.receiver.track.kind === track.kind
+        );
+        if (matchingTransceiver) {
+          matchingTransceiver.direction = "sendrecv";
+          matchingTransceiver.sender.replaceTrack(track);
+        } else {
+          pc.addTrack(track, stream);
+        }
       });
 
       const answer = await pc.createAnswer();
