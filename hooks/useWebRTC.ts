@@ -212,11 +212,6 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       iceCandidatesQueueRef.current = [];
 
       try {
-        // Pre-activate audio element on user tap
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.play().catch(() => {});
-        }
-
         const stream = await getUserMedia(type);
         const pc = createPeerConnection(recipient.id);
 
@@ -260,11 +255,6 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     setCallType(incomingCall.callType);
 
     try {
-      // Pre-activate audio element on user tap
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.play().catch(() => {});
-      }
-
       const stream = await getUserMedia(incomingCall.callType);
       const pc = createPeerConnection(callerId);
 
