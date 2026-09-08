@@ -55,14 +55,12 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     if (callState === "idle" || callState === "incoming") return;
     try {
       if (remoteStream) {
-        // Attach audio tracks ONLY to <audio> (unmuted, volume 1.0)
+        // Attach audio tracks to <audio> (unmuted, volume 1.0)
         const audioTracks = remoteStream.getAudioTracks();
         if (audioTracks.length > 0 && remoteAudioRef.current) {
           audioTracks.forEach((t) => (t.enabled = true));
-          const currentSrc = remoteAudioRef.current.srcObject as MediaStream | null;
-          const isSame = currentSrc && currentSrc.getAudioTracks().some((t) => t.id === audioTracks[0].id);
-          if (!isSame) {
-            remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          if (remoteAudioRef.current.srcObject !== remoteStream) {
+            remoteAudioRef.current.srcObject = remoteStream;
           }
           remoteAudioRef.current.muted = false;
           remoteAudioRef.current.volume = 1.0;

@@ -10,11 +10,16 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" },
-    { urls: "stun:stun4.l.google.com:19302" },
     { urls: "stun:stun.cloudflare.com:3478" },
-    { urls: "stun:stun.services.mozilla.com:3478" },
+    {
+      urls: [
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turn:openrelay.metered.ca:443?transport=tcp",
+      ],
+      username: "openrelay",
+      credential: "openrelay",
+    },
   ],
   iceCandidatePoolSize: 10,
 };
@@ -132,10 +137,8 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length > 0 && remoteAudioRef.current) {
           audioTracks.forEach((t) => (t.enabled = true));
-          const currentSrc = remoteAudioRef.current.srcObject as MediaStream | null;
-          const isSame = currentSrc && currentSrc.getAudioTracks().some((t) => t.id === audioTracks[0].id);
-          if (!isSame) {
-            remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          if (remoteAudioRef.current.srcObject !== stream) {
+            remoteAudioRef.current.srcObject = stream;
           }
           remoteAudioRef.current.muted = false;
           remoteAudioRef.current.volume = 1.0;
@@ -272,17 +275,12 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     setCallType(incomingCall.callType);
 
     try {
-      const stream = await getUserMedia(incomingCall.callType);
       const pc = createPeerConnection(callerId);
 
-      stream.getTracks().forEach((track) => {
-        track.enabled = true;
-        pc.addTrack(track, stream);
-      });
-
+      // 1. Set Remote Description (the Caller's offer) FIRST so transceivers are initialized!
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signalData));
 
-      // Process any ICE candidates that arrived before acceptCall was triggered
+      // 2. Process any ICE candidates that arrived before acceptCall was triggered
       if (iceCandidatesQueueRef.current.length > 0) {
         console.log(`Processing ${iceCandidatesQueueRef.current.length} queued ICE candidates`);
         for (const candidate of iceCandidatesQueueRef.current) {
@@ -294,6 +292,15 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         }
         iceCandidatesQueueRef.current = [];
       }
+
+      // 3. Acquire local mic / camera
+      const stream = await getUserMedia(incomingCall.callType);
+
+      // 4. Add tracks directly into the matched transceivers
+      stream.getTracks().forEach((track) => {
+        track.enabled = true;
+        pc.addTrack(track, stream);
+      });
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
