@@ -132,14 +132,22 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       }
 
       try {
-        if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== stream) {
-          remoteVideoRef.current.muted = true;
-          remoteVideoRef.current.srcObject = stream;
-          remoteVideoRef.current.play().catch(() => {});
-        }
-        if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== stream) {
-          remoteAudioRef.current.srcObject = stream;
+        event.track.enabled = true;
+
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length > 0 && remoteAudioRef.current) {
+          audioTracks.forEach((t) => (t.enabled = true));
+          remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          remoteAudioRef.current.muted = false;
+          remoteAudioRef.current.volume = 1.0;
           remoteAudioRef.current.play().catch(() => {});
+        }
+
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length > 0 && remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = new MediaStream(videoTracks);
+          remoteVideoRef.current.muted = true;
+          remoteVideoRef.current.play().catch(() => {});
         }
       } catch (e) {}
     };
@@ -219,7 +227,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         const stream = await getUserMedia(type);
         const pc = createPeerConnection(recipient.id);
 
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        stream.getTracks().forEach((track) => {
+          track.enabled = true;
+          pc.addTrack(track, stream);
+        });
 
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -262,7 +273,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       const stream = await getUserMedia(incomingCall.callType);
       const pc = createPeerConnection(callerId);
 
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      stream.getTracks().forEach((track) => {
+        track.enabled = true;
+        pc.addTrack(track, stream);
+      });
 
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signalData));
 
