@@ -140,6 +140,11 @@ function MessengerContent() {
   const hiddenContactsStorageKey = `messenger_hidden_contacts_${currentUser.id}`;
 
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const contactsRef = useRef<Contact[]>(contacts);
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
   const [hiddenContactIds, setHiddenContactIds] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -237,9 +242,10 @@ function MessengerContent() {
       activeContactId &&
       activeContactId !== currentUser.id
     ) {
-      const activeContact = contacts.find((c) => c.id === activeContactId);
+      const activeContact = contactsRef.current.find((c) => c.id === activeContactId);
+      const isGroup = activeContact?.isGroup || dbGroups?.some((g) => g.id === activeContactId);
 
-      if (activeContact?.isGroup) {
+      if (isGroup) {
         // Auto-join group room
         const socket = getSocket(API_URL);
         if (socket.connected) {
@@ -250,10 +256,20 @@ function MessengerContent() {
           .unwrap()
           .then((groupMsgs) => {
             if (groupMsgs) {
-              setMessagesMap((prev) => ({
-                ...prev,
-                [activeContactId]: groupMsgs as Message[],
-              }));
+              setMessagesMap((prev) => {
+                const existing = prev[activeContactId] || [];
+                const dbIds = new Set((groupMsgs as Message[]).map((m: any) => m.id));
+                // Preserve pending optimistic messages not yet confirmed in DB
+                const pending = existing.filter(
+                  (m) =>
+                    (m.id.startsWith("temp-") || !dbIds.has(m.id)) &&
+                    !groupMsgs.some((dbM: any) => dbM.text === m.text && dbM.senderId === m.senderId)
+                );
+                return {
+                  ...prev,
+                  [activeContactId]: [...(groupMsgs as Message[]), ...pending],
+                };
+              });
             }
           })
           .catch((err) => console.error("Failed to load group messages:", err));
@@ -265,16 +281,26 @@ function MessengerContent() {
           .unwrap()
           .then((dbMsgs) => {
             if (dbMsgs) {
-              setMessagesMap((prev) => ({
-                ...prev,
-                [activeContactId]: dbMsgs as Message[],
-              }));
+              setMessagesMap((prev) => {
+                const existing = prev[activeContactId] || [];
+                const dbIds = new Set((dbMsgs as Message[]).map((m: any) => m.id));
+                // Preserve pending optimistic messages not yet confirmed in DB
+                const pending = existing.filter(
+                  (m) =>
+                    (m.id.startsWith("temp-") || !dbIds.has(m.id)) &&
+                    !dbMsgs.some((dbM: any) => dbM.text === m.text && dbM.senderId === m.senderId)
+                );
+                return {
+                  ...prev,
+                  [activeContactId]: [...(dbMsgs as Message[]), ...pending],
+                };
+              });
             }
           })
           .catch((err) => console.error("Failed to load message history from DB:", err));
       }
     }
-  }, [activeContactId, currentUser.id, isAuthenticated, triggerGetMessages, triggerGetGroupMessages, contacts]);
+  }, [activeContactId, currentUser.id, isAuthenticated, triggerGetMessages, triggerGetGroupMessages, dbGroups]);
 
   // 1. Load persisted state from localStorage on mount / user change
   useEffect(() => {
@@ -638,7 +664,11 @@ function MessengerContent() {
         if (hasTemp) {
           let replaced = false;
           const updated = existing.map((m) => {
-            if (!replaced && m.id.startsWith("temp-") && m.text === data.text) {
+            if (
+              !replaced &&
+              m.id.startsWith("temp-") &&
+              (m.text === data.text || existing.filter((x) => x.id.startsWith("temp-")).length === 1)
+            ) {
               replaced = true;
               return {
                 ...m,
@@ -649,7 +679,9 @@ function MessengerContent() {
             }
             return m;
           });
-          return { ...prev, [contactId]: updated };
+          if (replaced) {
+            return { ...prev, [contactId]: updated };
+          }
         }
 
         return {
@@ -738,6 +770,37 @@ function MessengerContent() {
       setMessagesMap((prev) => {
         const existing = prev[data.groupId] || [];
         if (existing.some((m) => m.id === data.id)) return prev;
+
+        // If sender is current user and we have a matching temp message, replace it with confirmed id
+        if (data.senderId === currentUser.id) {
+          const hasTemp = existing.some((m) => m.id.startsWith("temp-"));
+          if (hasTemp) {
+            let replaced = false;
+            const updated = existing.map((m) => {
+              if (
+                !replaced &&
+                m.id.startsWith("temp-") &&
+                (m.text === data.text || existing.filter((x) => x.id.startsWith("temp-")).length === 1)
+              ) {
+                replaced = true;
+                return {
+                  ...m,
+                  id: data.id,
+                  timestamp,
+                  status: "delivered" as const,
+                };
+              }
+              return m;
+            });
+            if (replaced) {
+              return {
+                ...prev,
+                [data.groupId]: updated,
+              };
+            }
+          }
+        }
+
         return {
           ...prev,
           [data.groupId]: [...existing, newMessage],

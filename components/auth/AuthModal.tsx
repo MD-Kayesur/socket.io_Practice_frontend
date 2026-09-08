@@ -9,7 +9,7 @@ import {
 import { setCredentials } from "@/redux/slices/authSlice";
 import { useAppDispatch } from "@/redux/hooks";
 import { signInWithGooglePopup } from "@/components/firebase/firebase";
-import { X, Lock, Mail, User as UserIcon, Loader2 } from "lucide-react";
+import { X, Lock, Mail, User as UserIcon, Loader2, Eye, EyeOff } from "lucide-react";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -42,6 +42,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -234,15 +235,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               Password
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+              <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500 pointer-events-none" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700/80 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-800 border border-slate-700/80 rounded-xl pl-9 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors p-1 rounded-lg focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
             </div>
           </div>
 
@@ -262,6 +277,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             onClick={() => {
               setIsLogin(!isLogin);
               setErrorMsg("");
+              setShowPassword(false);
             }}
             className="text-indigo-400 font-semibold hover:underline"
           >
