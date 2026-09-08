@@ -12,6 +12,7 @@ import { AddMemberModal } from "@/components/chat/AddMemberModal";
 import { GroupMembersModal } from "@/components/chat/GroupMembersModal";
 import { IncomingCallModal } from "@/components/call/IncomingCallModal";
 import { VideoCallOverlay } from "@/components/call/VideoCallOverlay";
+import { CallErrorBoundary } from "@/components/call/CallErrorBoundary";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { getSocket } from "@/lib/socket";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
@@ -1275,31 +1276,34 @@ function MessengerContent() {
         />
       )}
 
-      {/* Incoming WebRTC Call Dialog */}
-      <IncomingCallModal
-        incomingCall={incomingCall}
-        onAccept={acceptCall}
-        onReject={rejectCall}
-      />
+      {/* Protected WebRTC Call Modals */}
+      <CallErrorBoundary onReset={endCall}>
+        {/* Incoming WebRTC Call Dialog */}
+        <IncomingCallModal
+          incomingCall={incomingCall}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+        />
 
-      {/* Active WebRTC Call Overlay */}
-      <VideoCallOverlay
-        callState={callState}
-        callType={callType}
-        peerInfo={peerInfo}
-        isMuted={isMuted}
-        isVideoOff={isVideoOff}
-        callDuration={callDuration}
-        localVideoRef={localVideoRef}
-        remoteVideoRef={remoteVideoRef}
-        remoteAudioRef={remoteAudioRef}
-        localStream={localStream}
-        remoteStream={remoteStream}
-        isRemoteVideoActive={isRemoteVideoActive}
-        onEndCall={endCall}
-        onToggleMute={toggleMute}
-        onToggleVideo={toggleVideo}
-      />
+        {/* Active WebRTC Call Overlay */}
+        <VideoCallOverlay
+          callState={callState}
+          callType={callType}
+          peerInfo={peerInfo}
+          isMuted={isMuted}
+          isVideoOff={isVideoOff}
+          callDuration={callDuration}
+          localVideoRef={localVideoRef}
+          remoteVideoRef={remoteVideoRef}
+          remoteAudioRef={remoteAudioRef}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          isRemoteVideoActive={isRemoteVideoActive}
+          onEndCall={endCall}
+          onToggleMute={toggleMute}
+          onToggleVideo={toggleVideo}
+        />
+      </CallErrorBoundary>
     </div>
   );
 }

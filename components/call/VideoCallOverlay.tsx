@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useCallback } from "react";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, User } from "lucide-react";
 
 interface VideoCallOverlayProps {
@@ -38,55 +38,49 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   onToggleMute,
   onToggleVideo,
 }) => {
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-
   if (callState === "idle" || callState === "incoming") return null;
 
   const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const total = Math.max(0, Math.floor(seconds || 0));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Has live remote video track
-  const hasLiveVideoTrack = Boolean(
-    remoteStream &&
-      remoteStream.getVideoTracks().length > 0 &&
-      remoteStream.getVideoTracks().some((t) => t.readyState === "live" && t.enabled)
-  );
-
-  // Show live video if track is live, playing, or flagged active
-  const shouldShowRemoteVideo =
-    callState === "connected" &&
-    callType === "video" &&
-    (hasLiveVideoTrack || isRemoteVideoActive || isVideoPlaying);
-
-  // Ensure remote audio and video streams are attached and playing as soon as available
+  // Ensure remote audio and video streams are attached safely
   useEffect(() => {
-    if (remoteStream) {
-      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
-        remoteVideoRef.current.muted = true;
-        remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.play().catch((e) => console.log("Remote video play waiting:", e));
+    try {
+      if (remoteStream) {
+        if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+          remoteVideoRef.current.muted = true;
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+        if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== remoteStream) {
+          remoteAudioRef.current.srcObject = remoteStream;
+          remoteAudioRef.current.play().catch(() => {});
+        }
       }
-      if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== remoteStream) {
-        remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play waiting:", e));
-      }
+    } catch (e) {
+      console.warn("Error attaching remote stream:", e);
     }
   }, [remoteStream, remoteVideoRef, remoteAudioRef, callState]);
 
-  // Ensure local video stream is attached and playing
+  // Ensure local camera video stream is attached safely
   useEffect(() => {
-    if (localStream && localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
-      localVideoRef.current.muted = true;
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(() => {});
+    try {
+      if (localStream && localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.muted = true;
+        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.play().catch(() => {});
+      }
+    } catch (e) {
+      console.warn("Error attaching local stream:", e);
     }
   }, [localStream, localVideoRef, callState]);
 
   // User gesture tap to ensure audio playback if mobile browser restricted autoplay
-  const handleOverlayTap = () => {
+  const handleOverlayTap = useCallback(() => {
     try {
       if (remoteAudioRef.current && remoteAudioRef.current.srcObject && remoteAudioRef.current.paused) {
         remoteAudioRef.current.play().catch(() => {});
@@ -95,7 +89,9 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         remoteVideoRef.current.play().catch(() => {});
       }
     } catch (e) {}
-  };
+  }, [remoteAudioRef, remoteVideoRef]);
+
+  const showLiveVideo = Boolean(isRemoteVideoActive && callState === "connected" && callType === "video");
 
   return (
     <div
@@ -116,59 +112,51 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         {/* Remote Video & Avatar View Area */}
         <div className="relative flex-1 bg-slate-950 flex items-center justify-center overflow-hidden">
           
-          {/* Always-mounted Remote Video Element for continuous stream playback.
-              Muted is required for mobile browsers (Chrome / Safari) to allow autoplay.
-              Voice audio is handled by the dedicated <audio> element above. */}
+          {/* Remote Video Element (Muted so mobile browser allows autoplay; voice is routed to <audio> above) */}
           {callType === "video" && (
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
               muted
-              onLoadedMetadata={(e) => {
-                e.currentTarget.play().catch(() => {});
-                setIsVideoPlaying(true);
-              }}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-                shouldShowRemoteVideo ? "opacity-100 z-10" : "opacity-0 pointer-events-none"
+                showLiveVideo ? "opacity-100 z-10" : "opacity-0 pointer-events-none"
               }`}
             />
           )}
 
-          {/* Remote User Profile Card (Visible ONLY when video is off, loading, or for audio calls) */}
-          {!shouldShowRemoteVideo && (
-            <div className="flex flex-col items-center justify-center text-center p-6 z-0">
-              <div className="relative mb-5">
-                {callState === "calling" ? (
-                  <div className="absolute -inset-2 rounded-full bg-indigo-500/30 animate-ping" />
-                ) : (
-                  <div className="absolute -inset-3 rounded-full bg-indigo-600/20 animate-pulse" />
-                )}
-                <img
-                  src={
-                    peerInfo?.avatar ||
-                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
-                  }
-                  alt={peerInfo?.name || "Remote User"}
-                  className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover ring-4 ring-indigo-500/60 shadow-2xl relative z-10"
-                />
-              </div>
-
-              <h2 className="text-xl md:text-2xl font-bold text-slate-100 mb-1.5 flex items-center gap-2">
-                <span>{peerInfo?.name || "User"}</span>
-              </h2>
-
-              <p className="text-xs text-indigo-400 font-medium tracking-wide">
-                {callState === "calling"
-                  ? "Ringing..."
-                  : callType === "video"
-                  ? shouldShowRemoteVideo
-                    ? `Live Video Call (${formatDuration(callDuration)})`
-                    : `Connecting Video (${formatDuration(callDuration)})...`
-                  : `Live Audio Call (${formatDuration(callDuration)})`}
-              </p>
+          {/* Remote User Profile Card (Visible when remote video is connecting, audio call, or ringing) */}
+          <div className="flex flex-col items-center justify-center text-center p-6 z-0">
+            <div className="relative mb-5">
+              {callState === "calling" ? (
+                <div className="absolute -inset-2 rounded-full bg-indigo-500/30 animate-ping" />
+              ) : (
+                <div className="absolute -inset-3 rounded-full bg-indigo-600/20 animate-pulse" />
+              )}
+              <img
+                src={
+                  peerInfo?.avatar ||
+                  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
+                }
+                alt={peerInfo?.name || "Remote User"}
+                className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover ring-4 ring-indigo-500/60 shadow-2xl relative z-10"
+              />
             </div>
-          )}
+
+            <h2 className="text-xl md:text-2xl font-bold text-slate-100 mb-1.5 flex items-center gap-2">
+              <span>{peerInfo?.name || "User"}</span>
+            </h2>
+
+            <p className="text-xs text-indigo-400 font-medium tracking-wide">
+              {callState === "calling"
+                ? "Ringing..."
+                : callType === "video"
+                ? showLiveVideo
+                  ? `Live Video Call (${formatDuration(callDuration)})`
+                  : `Connecting Video (${formatDuration(callDuration)})...`
+                : `Live Audio Call (${formatDuration(callDuration)})`}
+            </p>
+          </div>
 
           {/* Local Self Camera Preview (Picture in Picture for Video Calls) */}
           {callType === "video" && (
@@ -236,11 +224,11 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
                 isVideoOff
                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
                   : "bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700"
-            }`}
-          >
-            {isVideoOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
-          </button>
-        )}
+              }`}
+            >
+              {isVideoOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
+            </button>
+          )}
         </div>
       </div>
     </div>
