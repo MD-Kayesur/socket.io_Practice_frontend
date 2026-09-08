@@ -49,7 +49,7 @@ const playNotificationSound = () => {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
-  } catch (e) {}
+  } catch (e) { }
 };
 
 function MessengerContent() {
@@ -164,7 +164,7 @@ function MessengerContent() {
       if (savedHidden) {
         currentHidden = JSON.parse(savedHidden);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     setContacts((prev) => {
       const cleanPrev = prev.filter(
@@ -370,7 +370,7 @@ function MessengerContent() {
         const next = prev.filter((id) => id !== chatWith);
         try {
           localStorage.setItem(hiddenContactsStorageKey, JSON.stringify(next));
-        } catch (e) {}
+        } catch (e) { }
         return next;
       });
 
@@ -438,7 +438,7 @@ function MessengerContent() {
         const next = prev.filter((id) => id !== user.id);
         try {
           localStorage.setItem(hiddenContactsStorageKey, JSON.stringify(next));
-        } catch (e) {}
+        } catch (e) { }
         return next;
       });
 
@@ -1003,14 +1003,14 @@ function MessengerContent() {
         const next = Array.from(new Set([...prev, contactId]));
         try {
           localStorage.setItem(hiddenContactsStorageKey, JSON.stringify(next));
-        } catch (e) {}
+        } catch (e) { }
         return next;
       });
       setContacts((prev) => {
         const nextContacts = prev.filter((c) => c.id !== contactId);
         try {
           localStorage.setItem(contactsStorageKey, JSON.stringify(nextContacts));
-        } catch (e) {}
+        } catch (e) { }
         return nextContacts;
       });
       if (activeContactId === contactId) {
@@ -1097,9 +1097,9 @@ function MessengerContent() {
             isRemovedFromGroup={
               Boolean(
                 activeContact?.isGroup &&
-                  (removedGroupIds.includes(activeContact.id) ||
-                    (activeContact.members &&
-                      !activeContact.members.some((m: any) => m.id === currentUser.id)))
+                (removedGroupIds.includes(activeContact.id) ||
+                  (activeContact.members &&
+                    !activeContact.members.some((m: any) => m.id === currentUser.id)))
               )
             }
             onSendMessage={handleSendMessage}
