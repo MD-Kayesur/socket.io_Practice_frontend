@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, User } from "lucide-react";
 
 interface VideoCallOverlayProps {
@@ -12,6 +12,9 @@ interface VideoCallOverlayProps {
   callDuration: number;
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
+  remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
+  remoteStream?: MediaStream | null;
+  isRemoteVideoActive?: boolean;
   onEndCall: () => void;
   onToggleMute: () => void;
   onToggleVideo: () => void;
@@ -26,6 +29,9 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   callDuration,
   localVideoRef,
   remoteVideoRef,
+  remoteAudioRef,
+  remoteStream,
+  isRemoteVideoActive = false,
   onEndCall,
   onToggleMute,
   onToggleVideo,
@@ -38,51 +44,83 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // Ensure remote audio and video streams are attached and playing as soon as available
+  useEffect(() => {
+    if (remoteStream) {
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.play().catch((e) => console.log("Video play waiting:", e));
+      }
+      if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.play().catch((e) => console.log("Audio play waiting:", e));
+      }
+    }
+  }, [remoteStream, remoteVideoRef, remoteAudioRef, callState]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-lg animate-in fade-in duration-200 select-none">
+      {/* Dedicated audio element ensuring voice is always delivered */}
+      <audio
+        ref={remoteAudioRef}
+        autoPlay
+        playsInline
+        className="hidden"
+      />
+
       <div className="relative w-full h-full md:max-w-5xl md:max-h-[85vh] md:rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
         
-        {/* Remote Video / Audio Area */}
+        {/* Remote Video & Avatar View Area */}
         <div className="relative flex-1 bg-slate-950 flex items-center justify-center overflow-hidden">
-          {callState === "connected" && callType === "video" ? (
+          
+          {/* Always-mounted Remote Video Element for smooth stream attachment */}
+          {callType === "video" && (
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover"
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+                isRemoteVideoActive && callState === "connected" ? "opacity-100 z-10" : "opacity-0 pointer-events-none"
+              }`}
             />
-          ) : (
-            /* Audio Call / Calling State Placeholder */
-            <div className="flex flex-col items-center justify-center text-center p-6">
-              <div className="relative mb-4">
-                {callState === "calling" && (
-                  <div className="absolute inset-0 rounded-full bg-indigo-500/20 animate-ping" />
-                )}
-                <img
-                  src={
-                    peerInfo?.avatar ||
-                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
-                  }
-                  alt={peerInfo?.name}
-                  className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover ring-4 ring-indigo-500/50 shadow-xl"
-                />
-              </div>
-
-              <h2 className="text-xl md:text-2xl font-bold text-slate-100 mb-1">
-                {peerInfo?.name || "Calling..."}
-              </h2>
-
-              <p className="text-xs text-indigo-400 font-medium">
-                {callState === "calling"
-                  ? "Ringing..."
-                  : `In ${callType === "video" ? "Video" : "Audio"} Call (${formatDuration(callDuration)})`}
-              </p>
-            </div>
           )}
 
-          {/* Local Self Camera Preview (Picture in Picture) */}
+          {/* Remote User Profile Card (Visible when remote video is not active, during audio calls, or while ringing) */}
+          <div className="flex flex-col items-center justify-center text-center p-6 z-0">
+            <div className="relative mb-5">
+              {callState === "calling" ? (
+                <div className="absolute -inset-2 rounded-full bg-indigo-500/30 animate-ping" />
+              ) : (
+                <div className="absolute -inset-3 rounded-full bg-indigo-600/20 animate-pulse" />
+              )}
+              <img
+                src={
+                  peerInfo?.avatar ||
+                  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
+                }
+                alt={peerInfo?.name || "Remote User"}
+                className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover ring-4 ring-indigo-500/60 shadow-2xl relative z-10"
+              />
+            </div>
+
+            <h2 className="text-xl md:text-2xl font-bold text-slate-100 mb-1.5 flex items-center gap-2">
+              <span>{peerInfo?.name || "User"}</span>
+            </h2>
+
+            <p className="text-xs text-indigo-400 font-medium tracking-wide">
+              {callState === "calling"
+                ? "Ringing..."
+                : callType === "video"
+                ? isRemoteVideoActive
+                  ? `Live Video Call (${formatDuration(callDuration)})`
+                  : `Connecting Video (${formatDuration(callDuration)})...`
+                : `Live Audio Call (${formatDuration(callDuration)})`}
+            </p>
+          </div>
+
+          {/* Local Self Camera Preview (Picture in Picture for Video Calls) */}
           {callType === "video" && (
-            <div className="absolute bottom-4 right-4 w-32 h-44 md:w-48 md:h-64 rounded-2xl overflow-hidden border-2 border-indigo-500/50 shadow-2xl bg-slate-900 flex items-center justify-center z-20">
+            <div className="absolute bottom-4 right-4 w-28 h-40 sm:w-36 sm:h-52 md:w-48 md:h-64 rounded-2xl overflow-hidden border-2 border-indigo-500/70 shadow-2xl bg-slate-900 flex items-center justify-center z-20 transition-all">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -91,28 +129,30 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
                 className={`w-full h-full object-cover ${isVideoOff ? "hidden" : "block"}`}
               />
               {isVideoOff && (
-                <div className="flex flex-col items-center justify-center text-slate-400 gap-1">
-                  <User className="w-8 h-8" />
-                  <span className="text-[10px]">Camera Off</span>
+                <div className="flex flex-col items-center justify-center text-slate-400 gap-1.5 p-2 text-center">
+                  <User className="w-8 h-8 text-slate-500" />
+                  <span className="text-[11px] font-medium text-slate-400">Camera Off</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Top Bar Header */}
+          {/* Top Bar Header Badge */}
           <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-none">
-            <div className="bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 text-xs font-semibold text-slate-200 flex items-center gap-2 shadow">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{peerInfo?.name}</span>
+            <div className="bg-slate-900/85 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 text-xs font-semibold text-slate-200 flex items-center gap-2.5 shadow-lg">
+              <span className={`w-2.5 h-2.5 rounded-full ${callState === "connected" ? "bg-emerald-500 animate-pulse" : "bg-amber-500 animate-ping"}`} />
+              <span className="max-w-[140px] sm:max-w-none truncate">{peerInfo?.name || "Connected"}</span>
               {callState === "connected" && (
-                <span className="text-slate-400 ml-1 font-mono">{formatDuration(callDuration)}</span>
+                <span className="text-slate-400 ml-1 font-mono font-normal">
+                  {formatDuration(callDuration)}
+                </span>
               )}
             </div>
           </div>
         </div>
 
         {/* Bottom Call Controls Action Bar */}
-        <div className="p-4 md:p-6 bg-slate-900/90 border-t border-slate-800 flex items-center justify-center gap-6 z-30">
+        <div className="p-4 md:p-6 bg-slate-900/95 border-t border-slate-800 flex items-center justify-center gap-6 z-30">
           {/* Mute Mic Button */}
           <button
             onClick={onToggleMute}

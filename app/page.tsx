@@ -113,6 +113,9 @@ function MessengerContent() {
     callDuration,
     localVideoRef,
     remoteVideoRef,
+    remoteAudioRef,
+    remoteStream,
+    isRemoteVideoActive,
     startCall,
     acceptCall,
     rejectCall,
@@ -1281,6 +1284,9 @@ function MessengerContent() {
         callDuration={callDuration}
         localVideoRef={localVideoRef}
         remoteVideoRef={remoteVideoRef}
+        remoteAudioRef={remoteAudioRef}
+        remoteStream={remoteStream}
+        isRemoteVideoActive={isRemoteVideoActive}
         onEndCall={endCall}
         onToggleMute={toggleMute}
         onToggleVideo={toggleVideo}

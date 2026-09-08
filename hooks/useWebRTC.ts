@@ -10,7 +10,19 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    {
+      urls: [
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turn:openrelay.metered.ca:443?transport=tcp",
+      ],
+      username: "openrelay",
+      credential: "openrelay",
+    },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export interface IncomingCallData {
@@ -31,15 +43,20 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
 
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isRemoteVideoActive, setIsRemoteVideoActive] = useState(false);
+
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const remotePeerIdRef = useRef<string | null>(null);
+  const iceCandidatesQueueRef = useRef<RTCIceCandidateInit[]>([]);
 
-  // References for video elements
+  // References for video and audio elements
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Play ringing sound
   const playRingtone = useCallback(() => {
@@ -79,9 +96,13 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
 
     remoteStreamRef.current = null;
     remotePeerIdRef.current = null;
+    iceCandidatesQueueRef.current = [];
+    setRemoteStream(null);
+    setIsRemoteVideoActive(false);
     setCallState("idle");
     setPeerInfo(null);
     setIncomingCall(null);
@@ -106,12 +127,38 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     };
 
     pc.ontrack = (event) => {
+      console.log("WebRTC received track:", event.track.kind);
+      let stream = remoteStreamRef.current;
       if (event.streams && event.streams[0]) {
-        remoteStreamRef.current = event.streams[0];
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+        stream = event.streams[0];
+      } else {
+        if (!stream) {
+          stream = new MediaStream();
         }
+        stream.addTrack(event.track);
       }
+      remoteStreamRef.current = stream;
+      setRemoteStream(stream);
+
+      if (event.track.kind === "video") {
+        setIsRemoteVideoActive(true);
+        event.track.onmute = () => setIsRemoteVideoActive(false);
+        event.track.onunmute = () => setIsRemoteVideoActive(true);
+        event.track.onended = () => setIsRemoteVideoActive(false);
+      }
+
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+        remoteVideoRef.current.play().catch((e) => console.log("Remote video play deferred:", e));
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play deferred:", e));
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE Connection State:", pc.iceConnectionState);
     };
 
     return pc;
@@ -121,13 +168,25 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   const getUserMedia = useCallback(async (type: "audio" | "video") => {
     try {
       const constraints: MediaStreamConstraints = {
-        audio: true,
-        video: type === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video:
+          type === "video"
+            ? {
+                facingMode: "user",
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : false,
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
       return stream;
     } catch (err) {
@@ -143,6 +202,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       setCallType(type);
       setPeerInfo(recipient);
       setCallState("calling");
+      iceCandidatesQueueRef.current = [];
 
       try {
         const stream = await getUserMedia(type);
@@ -150,7 +210,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-        const offer = await pc.createOffer();
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: type === "video",
+        });
         await pc.setLocalDescription(offer);
 
         const socket = getSocket(API_URL);
@@ -163,6 +226,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
           callType: type,
         });
       } catch (err) {
+        console.error("startCall error:", err);
         cleanupCall();
       }
     },
@@ -173,6 +237,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   const acceptCall = useCallback(async () => {
     if (!incomingCall) return;
 
+    const callerId = incomingCall.callerId;
     setCallState("connected");
     setPeerInfo({
       id: incomingCall.callerId,
@@ -183,18 +248,34 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
     try {
       const stream = await getUserMedia(incomingCall.callType);
-      const pc = createPeerConnection(incomingCall.callerId);
+      const pc = createPeerConnection(callerId);
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signalData));
 
-      const answer = await pc.createAnswer();
+      // Process any ICE candidates that arrived before acceptCall was triggered
+      if (iceCandidatesQueueRef.current.length > 0) {
+        console.log(`Processing ${iceCandidatesQueueRef.current.length} queued ICE candidates`);
+        for (const candidate of iceCandidatesQueueRef.current) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.error("Error adding queued ICE candidate:", e);
+          }
+        }
+        iceCandidatesQueueRef.current = [];
+      }
+
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: incomingCall.callType === "video",
+      });
       await pc.setLocalDescription(answer);
 
       const socket = getSocket(API_URL);
       socket.emit("answerCall", {
-        callerId: incomingCall.callerId,
+        callerId: callerId,
         signalData: answer,
       });
 
@@ -205,6 +286,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
       setIncomingCall(null);
     } catch (err) {
+      console.error("acceptCall error:", err);
       cleanupCall();
     }
   }, [incomingCall, getUserMedia, createPeerConnection, cleanupCall]);
@@ -261,9 +343,26 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     };
 
     const handleCallAccepted = async (data: { signalData: RTCSessionDescriptionInit }) => {
+      console.log("Call accepted by remote user");
       setCallState("connected");
-      if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.signalData));
+      const pc = peerConnectionRef.current;
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.signalData));
+          if (iceCandidatesQueueRef.current.length > 0) {
+            console.log(`Caller processing ${iceCandidatesQueueRef.current.length} queued ICE candidates`);
+            for (const candidate of iceCandidatesQueueRef.current) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              } catch (e) {
+                console.error("Error adding queued candidate for caller:", e);
+              }
+            }
+            iceCandidatesQueueRef.current = [];
+          }
+        } catch (err) {
+          console.error("Error setting remote description on caller:", err);
+        }
       }
       durationTimerRef.current = setInterval(() => {
         setCallDuration((prev) => prev + 1);
@@ -280,12 +379,17 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     };
 
     const handleIceCandidate = async (data: { candidate: RTCIceCandidateInit }) => {
-      if (peerConnectionRef.current && data.candidate) {
+      if (!data?.candidate) return;
+      const pc = peerConnectionRef.current;
+      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         } catch (err) {
           console.error("Error adding ICE candidate:", err);
         }
+      } else {
+        // Queue candidates until remote description is set
+        iceCandidatesQueueRef.current.push(data.candidate);
       }
     };
 
@@ -314,6 +418,9 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     callDuration,
     localVideoRef,
     remoteVideoRef,
+    remoteAudioRef,
+    remoteStream,
+    isRemoteVideoActive,
     startCall,
     acceptCall,
     rejectCall,
