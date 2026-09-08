@@ -114,6 +114,7 @@ function MessengerContent() {
     localVideoRef,
     remoteVideoRef,
     remoteAudioRef,
+    localStream,
     remoteStream,
     isRemoteVideoActive,
     startCall,
@@ -123,6 +124,27 @@ function MessengerContent() {
     toggleMute,
     toggleVideo,
   } = useWebRTC(currentUser.id, currentUser.name, currentUser.avatar);
+
+  // Global mobile audio unlock on first user gesture
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          ctx.resume().then(() => ctx.close()).catch(() => {});
+        }
+      } catch (e) {}
+      document.removeEventListener("click", unlockAudio);
+      document.removeEventListener("touchstart", unlockAudio);
+    };
+    document.addEventListener("click", unlockAudio, { once: true });
+    document.addEventListener("touchstart", unlockAudio, { once: true });
+    return () => {
+      document.removeEventListener("click", unlockAudio);
+      document.removeEventListener("touchstart", unlockAudio);
+    };
+  }, []);
 
   // Fetch database 1-on-1 conversations and groups for current user
   const { data: dbConversations } = useGetUserConversationsQuery(currentUser.id, {
@@ -1285,6 +1307,7 @@ function MessengerContent() {
         localVideoRef={localVideoRef}
         remoteVideoRef={remoteVideoRef}
         remoteAudioRef={remoteAudioRef}
+        localStream={localStream}
         remoteStream={remoteStream}
         isRemoteVideoActive={isRemoteVideoActive}
         onEndCall={endCall}

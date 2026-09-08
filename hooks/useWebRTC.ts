@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getSocket } from "@/lib/socket";
+import { ringtoneManager } from "@/lib/ringtone";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -12,11 +13,13 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: "stun:stun2.l.google.com:19302" },
     { urls: "stun:stun3.l.google.com:19302" },
     { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:openrelay.metered.ca:80" },
     {
       urls: [
         "turn:openrelay.metered.ca:80",
         "turn:openrelay.metered.ca:443",
         "turn:openrelay.metered.ca:443?transport=tcp",
+        "turns:openrelay.metered.ca:443?transport=tcp",
       ],
       username: "openrelay",
       credential: "openrelay",
@@ -43,6 +46,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
 
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isRemoteVideoActive, setIsRemoteVideoActive] = useState(false);
 
@@ -58,26 +62,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Play ringing sound
-  const playRingtone = useCallback(() => {
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(440, ctx.currentTime);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 1.5);
-    } catch (e) {}
-  }, []);
-
   // Cleanup peer connection and media streams
   const cleanupCall = useCallback(() => {
+    ringtoneManager.stop();
+
     if (durationTimerRef.current) {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
@@ -101,6 +89,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     remoteStreamRef.current = null;
     remotePeerIdRef.current = null;
     iceCandidatesQueueRef.current = [];
+    setLocalStream(null);
     setRemoteStream(null);
     setIsRemoteVideoActive(false);
     setCallState("idle");
@@ -127,7 +116,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     };
 
     pc.ontrack = (event) => {
-      console.log("WebRTC received track:", event.track.kind);
+      console.log("WebRTC received remote track:", event.track.kind, event.track.id);
       let stream = remoteStreamRef.current;
       if (event.streams && event.streams[0]) {
         stream = event.streams[0];
@@ -137,23 +126,24 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         }
         stream.addTrack(event.track);
       }
-      remoteStreamRef.current = stream;
-      setRemoteStream(stream);
+
+      // Always create a new MediaStream instance so React updates state
+      const freshStream = new MediaStream(stream.getTracks());
+      remoteStreamRef.current = freshStream;
+      setRemoteStream(freshStream);
 
       if (event.track.kind === "video") {
         setIsRemoteVideoActive(true);
-        event.track.onmute = () => setIsRemoteVideoActive(false);
-        event.track.onunmute = () => setIsRemoteVideoActive(true);
         event.track.onended = () => setIsRemoteVideoActive(false);
       }
 
       if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
-        remoteVideoRef.current.play().catch((e) => console.log("Remote video play deferred:", e));
+        remoteVideoRef.current.srcObject = freshStream;
+        remoteVideoRef.current.play().catch((e) => console.log("Remote video play waiting:", e));
       }
       if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play deferred:", e));
+        remoteAudioRef.current.srcObject = freshStream;
+        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play waiting:", e));
       }
     };
 
@@ -184,15 +174,32 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
+      setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(() => {});
       }
       return stream;
     } catch (err) {
-      console.error("Failed to access media devices:", err);
-      alert("Could not access microphone or camera. Please check browser permissions.");
-      throw err;
+      console.warn("Retrying getUserMedia with basic constraints...", err);
+      try {
+        const fallbackConstraints: MediaStreamConstraints = {
+          audio: true,
+          video: type === "video" ? { facingMode: "user" } : false,
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
+        }
+        return stream;
+      } catch (fallbackErr) {
+        console.error("Failed to access media devices:", fallbackErr);
+        alert("Could not access microphone or camera. Please check browser permissions.");
+        throw fallbackErr;
+      }
     }
   }, []);
 
@@ -205,6 +212,11 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       iceCandidatesQueueRef.current = [];
 
       try {
+        // Pre-activate audio element on user tap
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.play().catch(() => {});
+        }
+
         const stream = await getUserMedia(type);
         const pc = createPeerConnection(recipient.id);
 
@@ -237,6 +249,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   const acceptCall = useCallback(async () => {
     if (!incomingCall) return;
 
+    ringtoneManager.stop();
     const callerId = incomingCall.callerId;
     setCallState("connected");
     setPeerInfo({
@@ -247,6 +260,11 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     setCallType(incomingCall.callType);
 
     try {
+      // Pre-activate audio element on user tap
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.play().catch(() => {});
+      }
+
       const stream = await getUserMedia(incomingCall.callType);
       const pc = createPeerConnection(callerId);
 
@@ -279,7 +297,6 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         signalData: answer,
       });
 
-      // Start duration timer
       durationTimerRef.current = setInterval(() => {
         setCallDuration((prev) => prev + 1);
       }, 1000);
@@ -293,6 +310,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
   // Reject incoming call
   const rejectCall = useCallback(() => {
+    ringtoneManager.stop();
     if (incomingCall) {
       const socket = getSocket(API_URL);
       socket.emit("rejectCall", { callerId: incomingCall.callerId });
@@ -302,6 +320,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
   // Hangup / End ongoing call
   const endCall = useCallback(() => {
+    ringtoneManager.stop();
     const remoteId = peerInfo?.id || remotePeerIdRef.current;
     if (remoteId) {
       const socket = getSocket(API_URL);
@@ -339,12 +358,13 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     const handleIncomingCall = (data: IncomingCallData) => {
       setIncomingCall(data);
       setCallState("incoming");
-      playRingtone();
+      ringtoneManager.start();
     };
 
     const handleCallAccepted = async (data: { signalData: RTCSessionDescriptionInit }) => {
       console.log("Call accepted by remote user");
       setCallState("connected");
+      ringtoneManager.stop();
       const pc = peerConnectionRef.current;
       if (pc) {
         try {
@@ -370,11 +390,13 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     };
 
     const handleCallRejected = () => {
+      ringtoneManager.stop();
       alert("Call was declined.");
       cleanupCall();
     };
 
     const handleCallEnded = () => {
+      ringtoneManager.stop();
       cleanupCall();
     };
 
@@ -388,7 +410,6 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
           console.error("Error adding ICE candidate:", err);
         }
       } else {
-        // Queue candidates until remote description is set
         iceCandidatesQueueRef.current.push(data.candidate);
       }
     };
@@ -400,13 +421,14 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     socket.on("iceCandidate", handleIceCandidate);
 
     return () => {
+      ringtoneManager.stop();
       socket.off("incomingCall", handleIncomingCall);
       socket.off("callAccepted", handleCallAccepted);
       socket.off("callRejected", handleCallRejected);
       socket.off("callEnded", handleCallEnded);
       socket.off("iceCandidate", handleIceCandidate);
     };
-  }, [playRingtone, cleanupCall]);
+  }, [cleanupCall]);
 
   return {
     callState,
@@ -419,6 +441,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
     localVideoRef,
     remoteVideoRef,
     remoteAudioRef,
+    localStream,
     remoteStream,
     isRemoteVideoActive,
     startCall,

@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { IncomingCallData } from "@/hooks/useWebRTC";
 import { Phone, PhoneOff, Video, Mic } from "lucide-react";
+import { getRingtoneUri } from "@/lib/ringtone";
 
 interface IncomingCallModalProps {
   incomingCall: IncomingCallData | null;
@@ -17,8 +18,20 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
 }) => {
   if (!incomingCall) return null;
 
+  const ringtoneUri = getRingtoneUri();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200 select-none">
+      {/* Autoplaying looping ringtone audio element */}
+      {ringtoneUri && (
+        <audio
+          autoPlay
+          loop
+          playsInline
+          src={ringtoneUri}
+          className="hidden pointer-events-none"
+        />
+      )}
       <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center">
         {/* Ringing Animation Avatar */}
         <div className="relative mb-5">
