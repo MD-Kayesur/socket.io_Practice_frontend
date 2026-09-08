@@ -12,7 +12,7 @@ interface VideoCallOverlayProps {
   callDuration: number;
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
-  remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
+  remoteAudioRef: React.RefObject<HTMLVideoElement | HTMLAudioElement | null>;
   localStream?: MediaStream | null;
   remoteStream?: MediaStream | null;
   isRemoteVideoActive?: boolean;
@@ -50,19 +50,19 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // 1. Separate Audio & Video tracks so Chromium never mutes remote voice audio
+  // 1. Separate Audio & Video tracks and route audio to loudspeaker
   useEffect(() => {
     if (callState === "idle" || callState === "incoming") return;
     try {
       if (remoteStream) {
-        // Attach audio tracks to <audio> (unmuted, volume 1.0)
         const audioTracks = remoteStream.getAudioTracks();
+        const videoTracks = remoteStream.getVideoTracks();
+
+        // 1. Attach audio to remoteAudioRef (hidden video element routing to loudspeaker on mobile)
         if (audioTracks.length > 0 && remoteAudioRef.current) {
           audioTracks.forEach((t) => (t.enabled = true));
-          if (remoteAudioRef.current.srcObject !== remoteStream) {
-            remoteAudioRef.current.srcObject = remoteStream;
-          }
-          remoteAudioRef.current.muted = false;
+          remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          remoteAudioRef.current.muted = Boolean(callType === "video" && videoTracks.length > 0 && isRemoteVideoActive);
           remoteAudioRef.current.volume = 1.0;
           remoteAudioRef.current.play().then(() => {
             setIsAudioBlocked(false);
@@ -72,22 +72,20 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
           });
         }
 
-        // Attach video tracks ONLY to <video> (muted to satisfy autoplay)
-        const videoTracks = remoteStream.getVideoTracks();
+        // 2. Attach remote video and audio to remoteVideoRef for video calls
         if (videoTracks.length > 0 && remoteVideoRef.current) {
-          const currentVideoSrc = remoteVideoRef.current.srcObject as MediaStream | null;
-          const isSameVideo = currentVideoSrc && currentVideoSrc.getVideoTracks().some((t) => t.id === videoTracks[0].id);
-          if (!isSameVideo) {
-            remoteVideoRef.current.srcObject = new MediaStream(videoTracks);
-          }
-          remoteVideoRef.current.muted = true;
-          remoteVideoRef.current.play().catch(() => {});
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.muted = false;
+          remoteVideoRef.current.volume = 1.0;
+          remoteVideoRef.current.play().then(() => {
+            setIsAudioBlocked(false);
+          }).catch(() => {});
         }
       }
     } catch (e) {
       console.warn("Error attaching remote stream:", e);
     }
-  }, [remoteStream, remoteVideoRef, remoteAudioRef, callState]);
+  }, [remoteStream, remoteVideoRef, remoteAudioRef, callState, callType, isRemoteVideoActive]);
 
   // 2. Attach local video track
   useEffect(() => {
@@ -124,7 +122,6 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     let analyser: AnalyserNode | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
     let animId: number | null = null;
-    let clonedTrack: MediaStreamTrack | null = null;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -137,9 +134,8 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.4;
         
-        // Clone track to completely isolate Web Audio from WebRTC transmission on mobile
-        clonedTrack = audioTrack.clone();
-        source = audioCtx.createMediaStreamSource(new MediaStream([clonedTrack]));
+        // Pass local audioTrack directly WITHOUT cloning so Android AudioRecord HAL does not mute WebRTC!
+        source = audioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -171,9 +167,6 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
       if (source) {
         try { source.disconnect(); } catch (e) {}
       }
-      if (clonedTrack) {
-        try { clonedTrack.stop(); } catch (e) {}
-      }
       if (audioCtx && audioCtx.state !== "closed") {
         try { audioCtx.close().catch(() => {}); } catch (e) {}
       }
@@ -196,7 +189,6 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     let analyser: AnalyserNode | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
     let animId: number | null = null;
-    let clonedTrack: MediaStreamTrack | null = null;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -208,8 +200,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.4;
-        clonedTrack = audioTrack.clone();
-        source = audioCtx.createMediaStreamSource(new MediaStream([clonedTrack]));
+        source = audioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -238,31 +229,31 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
       if (source) {
         try { source.disconnect(); } catch (e) {}
       }
-      if (clonedTrack) {
-        try { clonedTrack.stop(); } catch (e) {}
-      }
       if (audioCtx && audioCtx.state !== "closed") {
         try { audioCtx.close().catch(() => {}); } catch (e) {}
       }
     };
   }, [remoteStream, callState]);
 
-  // User gesture tap to guarantee audio unpause
+  // User gesture tap to guarantee audio unpause across all elements
   const handleOverlayTap = useCallback(() => {
     try {
       if (remoteAudioRef.current) {
         remoteAudioRef.current.muted = false;
         remoteAudioRef.current.volume = 1.0;
-        if (remoteAudioRef.current.paused) {
-          remoteAudioRef.current.play().then(() => {
-            setIsAudioBlocked(false);
-          }).catch(() => {});
-        } else {
+        remoteAudioRef.current.play().then(() => {
           setIsAudioBlocked(false);
-        }
+        }).catch(() => {});
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.muted = false;
+        remoteVideoRef.current.volume = 1.0;
+        remoteVideoRef.current.play().then(() => {
+          setIsAudioBlocked(false);
+        }).catch(() => {});
       }
     } catch (e) {}
-  }, [remoteAudioRef]);
+  }, [remoteAudioRef, remoteVideoRef]);
 
   if (callState === "idle" || callState === "incoming") return null;
 
@@ -274,11 +265,12 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
       onTouchStart={handleOverlayTap}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-lg animate-in fade-in duration-200 select-none"
     >
-      {/* Dedicated audio element ensuring voice is always delivered loud and clear without echo */}
-      <audio
-        ref={remoteAudioRef}
+      {/* Dedicated media element using video element so Android/iOS routes to LOUDSPEAKER instead of earpiece */}
+      <video
+        ref={remoteAudioRef as any}
         autoPlay
         playsInline
+        className="fixed -top-96 -left-96 w-1 h-1 opacity-0 pointer-events-none"
       />
 
       <div className="relative w-full h-full md:max-w-5xl md:max-h-[85vh] md:rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
@@ -286,13 +278,12 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         {/* Remote Video & Avatar View Area */}
         <div className="relative flex-1 bg-slate-950 flex items-center justify-center overflow-hidden">
           
-          {/* Remote Video Element (Muted so mobile browser allows autoplay; voice is routed to <audio> above) */}
+          {/* Remote Video Element */}
           {callType === "video" && (
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              muted
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
                 showLiveVideo ? "opacity-100 z-10" : "opacity-0 pointer-events-none"
               }`}

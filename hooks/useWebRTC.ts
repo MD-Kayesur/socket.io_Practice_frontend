@@ -11,25 +11,11 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
     { urls: "stun:stun.cloudflare.com:3478" },
-    {
-      urls: [
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turn:openrelay.metered.ca:443?transport=tcp",
-      ],
-      username: "openrelay",
-      credential: "openrelay",
-    },
-    {
-      urls: [
-        "turn:staticauth.openrelay.metered.ca:80",
-        "turn:staticauth.openrelay.metered.ca:443",
-        "turn:staticauth.openrelay.metered.ca:443?transport=tcp",
-      ],
-      username: "openrelayproject",
-      credential: "openrelayprojectsecret",
-    },
+    { urls: "stun:global.stun.twilio.com:3478" },
+    { urls: "stun:stun.nextcloud.com:3478" },
   ],
   iceCandidatePoolSize: 10,
 };
@@ -66,7 +52,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
   // References for video and audio elements
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteAudioRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
   // Cleanup peer connection and media streams
   const cleanupCall = useCallback(() => {
@@ -146,7 +132,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         });
       }
 
-      setRemoteStream(stream);
+      // Create a fresh MediaStream instance reference so React state updates and triggers re-renders!
+      const updatedStream = new MediaStream(stream.getTracks());
+      remoteStreamRef.current = updatedStream;
+      setRemoteStream(updatedStream);
 
       if (event.track.kind === "video") {
         setIsRemoteVideoActive(true);
@@ -154,14 +143,10 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       }
 
       try {
-        event.track.enabled = true;
-
-        const audioTracks = stream.getAudioTracks();
+        const audioTracks = updatedStream.getAudioTracks();
         if (audioTracks.length > 0 && remoteAudioRef.current) {
           audioTracks.forEach((t) => (t.enabled = true));
-          if (remoteAudioRef.current.srcObject !== stream) {
-            remoteAudioRef.current.srcObject = stream;
-          }
+          remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
           remoteAudioRef.current.muted = false;
           remoteAudioRef.current.volume = 1.0;
           remoteAudioRef.current.play().catch((e) => {
@@ -169,14 +154,11 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
           });
         }
 
-        const videoTracks = stream.getVideoTracks();
+        const videoTracks = updatedStream.getVideoTracks();
         if (videoTracks.length > 0 && remoteVideoRef.current) {
-          const currentVideoSrc = remoteVideoRef.current.srcObject as MediaStream | null;
-          const isSameVideo = currentVideoSrc && currentVideoSrc.getVideoTracks().some((t) => t.id === videoTracks[0].id);
-          if (!isSameVideo) {
-            remoteVideoRef.current.srcObject = new MediaStream(videoTracks);
-          }
-          remoteVideoRef.current.muted = true;
+          remoteVideoRef.current.srcObject = updatedStream;
+          remoteVideoRef.current.muted = false;
+          remoteVideoRef.current.volume = 1.0;
           remoteVideoRef.current.play().catch(() => {});
         }
       } catch (e) {}
@@ -328,18 +310,27 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       // 3. Acquire local mic / camera
       const stream = await getUserMedia(incomingCall.callType);
 
-      // 4. Bind local tracks explicitly into the matched transceivers
-      stream.getTracks().forEach((track) => {
+      // 4. Bind local tracks explicitly into the matched transceivers with stream association
+      for (const track of stream.getTracks()) {
         track.enabled = true;
         const matchingTransceiver = pc.getTransceivers().find(
           (t) => t.receiver.track.kind === track.kind
         );
         if (matchingTransceiver) {
           matchingTransceiver.direction = "sendrecv";
-          matchingTransceiver.sender.replaceTrack(track);
+          if (typeof (matchingTransceiver.sender as any).setStreams === "function") {
+            try {
+              (matchingTransceiver.sender as any).setStreams(stream);
+            } catch (e) {}
+          }
+          await matchingTransceiver.sender.replaceTrack(track);
         } else {
           pc.addTrack(track, stream);
         }
+      }
+
+      pc.getTransceivers().forEach((t) => {
+        t.direction = "sendrecv";
       });
 
       const answer = await pc.createAnswer();
