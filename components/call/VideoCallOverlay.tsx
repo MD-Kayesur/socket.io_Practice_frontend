@@ -61,36 +61,57 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     callType === "video" &&
     (hasLiveVideoTrack || isRemoteVideoActive || isVideoPlaying);
 
-  // Ensure remote audio and video streams are attached and playing as soon as available
+  // Ensure remote audio and video streams are attached and playing with audio enabled
   useEffect(() => {
     if (remoteStream) {
       if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.play().catch((e) => console.log("Remote video play waiting:", e));
+        remoteVideoRef.current.muted = false;
+        remoteVideoRef.current.play().catch((e) => console.log("Remote video play deferred:", e));
       }
       if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== remoteStream) {
         remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play waiting:", e));
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.volume = 1.0;
+        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play deferred:", e));
       }
     }
   }, [remoteStream, remoteVideoRef, remoteAudioRef, callState]);
 
-  // Ensure local video stream is attached and playing
+  // Ensure local video stream is attached and playing (muted so user doesn't hear their own mic)
   useEffect(() => {
     if (localStream && localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.muted = true;
       localVideoRef.current.play().catch(() => {});
     }
   }, [localStream, localVideoRef, callState]);
 
+  // User gesture handler on any tap of the screen to un-block / play audio
+  const handleUserGestureUnlock = () => {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = false;
+      remoteVideoRef.current.play().catch(() => {});
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1.0;
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-lg animate-in fade-in duration-200 select-none">
-      {/* Dedicated audio element ensuring voice is always delivered loud and clear without echo */}
+    <div
+      onClick={handleUserGestureUnlock}
+      onTouchStart={handleUserGestureUnlock}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-lg animate-in fade-in duration-200 select-none"
+    >
+      {/* Audio element for voice playback */}
       <audio
         ref={remoteAudioRef}
         autoPlay
         playsInline
-        className="absolute opacity-0 pointer-events-none w-0 h-0"
+        className="hidden"
       />
 
       <div className="relative w-full h-full md:max-w-5xl md:max-h-[85vh] md:rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
@@ -99,19 +120,19 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         <div className="relative flex-1 bg-slate-950 flex items-center justify-center overflow-hidden">
           
           {/* Always-mounted Remote Video Element for continuous stream playback.
-              Muted is required for mobile browsers (Chrome / Safari) to allow autoplay.
-              Voice audio is handled by the dedicated <audio> element above. */}
+              Notice: muted is NOT true. The remote peer's voice must play out of the speakers! */}
           {callType === "video" && (
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              muted
               onLoadedMetadata={(e) => {
+                e.currentTarget.muted = false;
                 e.currentTarget.play().catch(() => {});
                 setIsVideoPlaying(true);
               }}
               onCanPlay={(e) => {
+                e.currentTarget.muted = false;
                 e.currentTarget.play().catch(() => {});
                 setIsVideoPlaying(true);
               }}
@@ -158,7 +179,8 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
             </div>
           )}
 
-          {/* Local Self Camera Preview (Picture in Picture for Video Calls) */}
+          {/* Local Self Camera Preview (Picture in Picture for Video Calls)
+              Local camera MUST be muted so user does not hear their own microphone looped back */}
           {callType === "video" && (
             <div className="absolute bottom-4 right-4 w-28 h-40 sm:w-36 sm:h-52 md:w-48 md:h-64 rounded-2xl overflow-hidden border-2 border-indigo-500/70 shadow-2xl bg-slate-900 flex items-center justify-center z-20 transition-all">
               <video
@@ -224,11 +246,11 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
                 isVideoOff
                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
                   : "bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700"
-            }`}
-          >
-            {isVideoOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
-          </button>
-        )}
+              }`}
+            >
+              {isVideoOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
+            </button>
+          )}
         </div>
       </div>
     </div>
