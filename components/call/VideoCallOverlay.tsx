@@ -65,6 +65,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   useEffect(() => {
     if (remoteStream) {
       if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.muted = true;
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.play().catch((e) => console.log("Remote video play waiting:", e));
       }
@@ -78,13 +79,30 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   // Ensure local video stream is attached and playing
   useEffect(() => {
     if (localStream && localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
+      localVideoRef.current.muted = true;
       localVideoRef.current.srcObject = localStream;
       localVideoRef.current.play().catch(() => {});
     }
   }, [localStream, localVideoRef, callState]);
 
+  // User gesture tap to ensure audio playback if mobile browser restricted autoplay
+  const handleOverlayTap = () => {
+    try {
+      if (remoteAudioRef.current && remoteAudioRef.current.srcObject && remoteAudioRef.current.paused) {
+        remoteAudioRef.current.play().catch(() => {});
+      }
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject && remoteVideoRef.current.paused) {
+        remoteVideoRef.current.play().catch(() => {});
+      }
+    } catch (e) {}
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-lg animate-in fade-in duration-200 select-none">
+    <div
+      onClick={handleOverlayTap}
+      onTouchStart={handleOverlayTap}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-lg animate-in fade-in duration-200 select-none"
+    >
       {/* Dedicated audio element ensuring voice is always delivered loud and clear without echo */}
       <audio
         ref={remoteAudioRef}

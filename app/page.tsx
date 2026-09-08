@@ -49,6 +49,11 @@ const playNotificationSound = () => {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
+    setTimeout(() => {
+      try {
+        ctx.close().catch(() => {});
+      } catch (e) {}
+    }, 300);
   } catch (e) { }
 };
 

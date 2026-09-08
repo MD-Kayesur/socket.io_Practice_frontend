@@ -10,9 +10,6 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" },
-    { urls: "stun:stun4.l.google.com:19302" },
     { urls: "stun:openrelay.metered.ca:80" },
     {
       urls: [
@@ -25,7 +22,6 @@ const RTC_CONFIG: RTCConfiguration = {
       credential: "openrelay",
     },
   ],
-  iceCandidatePoolSize: 10,
 };
 
 export interface IncomingCallData {
@@ -137,6 +133,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
       try {
         if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== stream) {
+          remoteVideoRef.current.muted = true;
           remoteVideoRef.current.srcObject = stream;
           remoteVideoRef.current.play().catch(() => {});
         }
@@ -156,6 +153,11 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
   // Get user media stream (mic & camera)
   const getUserMedia = useCallback(async (type: "audio" | "video") => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      alert("Microphone/Camera access is not supported in this browser.");
+      throw new Error("getUserMedia not supported");
+    }
+
     try {
       const constraints: MediaStreamConstraints = {
         audio: {
@@ -167,8 +169,8 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
           type === "video"
             ? {
                 facingMode: "user",
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
+                width: { ideal: 640, max: 1280 },
+                height: { ideal: 480, max: 720 },
               }
             : false,
       };
@@ -176,6 +178,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       localStreamRef.current = stream;
       setLocalStream(stream);
       if (localVideoRef.current) {
+        localVideoRef.current.muted = true;
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(() => {});
       }
@@ -185,12 +188,13 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       try {
         const fallbackConstraints: MediaStreamConstraints = {
           audio: true,
-          video: type === "video" ? { facingMode: "user" } : false,
+          video: type === "video" ? true : false,
         };
         const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
         localStreamRef.current = stream;
         setLocalStream(stream);
         if (localVideoRef.current) {
+          localVideoRef.current.muted = true;
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.play().catch(() => {});
         }

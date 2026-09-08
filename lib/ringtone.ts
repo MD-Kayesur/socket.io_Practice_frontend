@@ -63,6 +63,7 @@ class RingtoneManager {
     this.isRinging = true;
 
     // 1. Play HTML5 Audio element
+    let html5Playing = false;
     try {
       const uri = getRingtoneUri();
       if (uri) {
@@ -72,17 +73,38 @@ class RingtoneManager {
         this.audioElement.currentTime = 0;
         this.audioElement.loop = true;
         this.audioElement.volume = 1.0;
-        this.audioElement.play().catch((err) => {
-          console.warn("Audio element play error (waiting user gesture):", err);
-        });
+        const playPromise = this.audioElement.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              html5Playing = true;
+            })
+            .catch(() => {
+              html5Playing = false;
+            });
+        }
       }
     } catch (e) {
       console.warn("HTML5 audio playback error:", e);
     }
 
-    // 2. Synthesize with Web Audio API as parallel backup
+    // 2. Trigger vibration pattern
+    const triggerVibration = () => {
+      if (!this.isRinging) return;
+      try {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([600, 300, 600, 300, 800]);
+        }
+      } catch (err) {}
+    };
+
+    // 3. Synthesize with Web Audio API only if HTML5 audio is blocked
     const triggerTone = () => {
       if (!this.isRinging) return;
+      triggerVibration();
+
+      if (html5Playing) return; // Audio element is working, no need for oscillator duplication
+
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         if (!AudioCtx) return;
@@ -105,8 +127,8 @@ class RingtoneManager {
             osc2.frequency.setValueAtTime(480, now);
 
             gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.6, now + 0.05);
-            gain.gain.setValueAtTime(0.6, now + 1.2);
+            gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+            gain.gain.setValueAtTime(0.5, now + 1.2);
             gain.gain.linearRampToValueAtTime(0.001, now + 1.3);
 
             osc1.connect(gain);
@@ -117,9 +139,7 @@ class RingtoneManager {
             osc2.start(now);
             osc1.stop(now + 1.3);
             osc2.stop(now + 1.3);
-          } catch (err) {
-            console.warn("Oscillator start error:", err);
-          }
+          } catch (err) {}
         };
 
         if (ctx.state === "suspended") {
@@ -127,14 +147,7 @@ class RingtoneManager {
         } else {
           playOscillators();
         }
-
-        // 3. Trigger mobile vibration pattern
-        if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate([600, 300, 600, 300, 800]);
-        }
-      } catch (err) {
-        console.warn("WebAudio tone error:", err);
-      }
+      } catch (err) {}
     };
 
     triggerTone();
