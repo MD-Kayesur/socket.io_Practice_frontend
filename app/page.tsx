@@ -12,8 +12,10 @@ import { AddMemberModal } from "@/components/chat/AddMemberModal";
 import { GroupMembersModal } from "@/components/chat/GroupMembersModal";
 import { IncomingCallModal } from "@/components/call/IncomingCallModal";
 import { VideoCallOverlay } from "@/components/call/VideoCallOverlay";
+import { GroupCallOverlay } from "@/components/call/GroupCallOverlay";
 import { CallErrorBoundary } from "@/components/call/CallErrorBoundary";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { useGroupWebRTC } from "@/hooks/useGroupWebRTC";
 import { getSocket } from "@/lib/socket";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { setActiveContactId, setSocketStatus } from "@/redux/slices/chatSlice";
@@ -130,6 +132,24 @@ function MessengerContent() {
     toggleMute,
     toggleVideo,
   } = useWebRTC(currentUser.id, currentUser.name, currentUser.avatar);
+
+  // WebRTC Live Multi-User Group Audio & Video Calling Hook
+  const {
+    isGroupCallActive,
+    groupCallType,
+    activeGroup: activeCallGroup,
+    participants: groupParticipants,
+    callDuration: groupCallDuration,
+    localStream: groupLocalStream,
+    isMuted: isGroupMuted,
+    isVideoOff: isGroupVideoOff,
+    activeGroupCallsMap,
+    startGroupCall,
+    joinGroupCall,
+    leaveGroupCall,
+    toggleMute: toggleGroupMute,
+    toggleVideo: toggleGroupVideo,
+  } = useGroupWebRTC(currentUser.id, currentUser.name, currentUser.avatar);
 
 
 
@@ -262,6 +282,7 @@ function MessengerContent() {
         const socket = getSocket(API_URL);
         if (socket.connected) {
           socket.emit("join-group", { groupId: activeContactId });
+          socket.emit("checkGroupCall", { groupId: activeContactId });
         }
 
         triggerGetGroupMessages(activeContactId)
@@ -1187,14 +1208,26 @@ function MessengerContent() {
             onOpenAddMemberModal={() => setIsAddMemberModalOpen(true)}
             onOpenGroupMembersModal={() => setIsGroupMembersModalOpen(true)}
             onStartAudioCall={() => {
-              if (activeContact && !activeContact.isGroup) {
-                startCall(activeContact, "audio");
+              if (activeContact) {
+                if (activeContact.isGroup) {
+                  startGroupCall(activeContact, "audio");
+                } else {
+                  startCall(activeContact, "audio");
+                }
               }
             }}
             onStartVideoCall={() => {
-              if (activeContact && !activeContact.isGroup) {
-                startCall(activeContact, "video");
+              if (activeContact) {
+                if (activeContact.isGroup) {
+                  startGroupCall(activeContact, "video");
+                } else {
+                  startCall(activeContact, "video");
+                }
               }
+            }}
+            activeGroupCall={activeContact?.isGroup ? activeGroupCallsMap[activeContact.id] || null : null}
+            onJoinGroupCall={(group, type) => {
+              joinGroupCall(group, type);
             }}
             onBack={() => dispatch(setActiveContactId(""))}
             onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
@@ -1305,6 +1338,26 @@ function MessengerContent() {
             onEndCall={endCall}
             onToggleMute={toggleMute}
             onToggleVideo={toggleVideo}
+          />
+        )}
+
+        {/* Active WebRTC Group Call Overlay */}
+        {isGroupCallActive && (
+          <GroupCallOverlay
+            isOpen={isGroupCallActive}
+            group={activeCallGroup}
+            callType={groupCallType}
+            callDuration={groupCallDuration}
+            localStream={groupLocalStream}
+            participants={groupParticipants}
+            isMuted={isGroupMuted}
+            isVideoOff={isGroupVideoOff}
+            currentUserId={currentUser.id}
+            currentUserName={currentUser.name}
+            currentUserAvatar={currentUser.avatar}
+            onLeaveCall={leaveGroupCall}
+            onToggleMute={toggleGroupMute}
+            onToggleVideo={toggleGroupVideo}
           />
         )}
       </CallErrorBoundary>

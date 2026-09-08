@@ -51,6 +51,12 @@ interface ChatWindowProps {
   onOpenGroupMembersModal?: () => void;
   onStartAudioCall?: () => void;
   onStartVideoCall?: () => void;
+  activeGroupCall?: {
+    callType: "audio" | "video";
+    participantCount: number;
+    caller: { id: string; name: string; avatar?: string };
+  } | null;
+  onJoinGroupCall?: (group: Contact, type: "audio" | "video") => void;
   onBack?: () => void;
   onToggleMobileSidebar?: () => void;
 }
@@ -73,6 +79,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   onOpenGroupMembersModal,
   onStartAudioCall,
   onStartVideoCall,
+  activeGroupCall,
+  onJoinGroupCall,
   onBack,
   onToggleMobileSidebar,
 }) => {
@@ -216,14 +224,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           )}
           <button
             onClick={onStartAudioCall}
-            title="Start Audio Call"
+            title={activeContact.isGroup ? "Start Group Audio Call" : "Start Audio Call"}
             className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
           >
             <Phone className="w-4 h-4" />
           </button>
           <button
             onClick={onStartVideoCall}
-            title="Start Video Call"
+            title={activeContact.isGroup ? "Start Group Video Call" : "Start Video Call"}
             className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
           >
             <Video className="w-4 h-4" />
@@ -336,6 +344,32 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         <div className="bg-rose-950/80 border-b border-rose-800/80 p-3 px-4 text-center text-xs font-semibold text-rose-200 flex items-center justify-center gap-2 animate-in fade-in duration-150">
           <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
           <span>You have been removed from this group. You are no longer available to send messages.</span>
+        </div>
+      )}
+
+      {/* Active Group Call Banner */}
+      {activeContact.isGroup && activeGroupCall && (
+        <div className="bg-emerald-950/85 border-b border-emerald-500/30 px-4 py-2.5 flex items-center justify-between animate-in fade-in select-none">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <div>
+              <p className="text-xs font-bold text-emerald-200 flex items-center gap-1.5">
+                <span>Group {activeGroupCall.callType === "video" ? "Video" : "Audio"} Call in progress</span>
+                <span className="text-[11px] font-normal text-emerald-400/80">({activeGroupCall.participantCount} in call)</span>
+              </p>
+              <p className="text-[10px] text-emerald-400/70">Started by {activeGroupCall.caller?.name || "Group Member"}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onJoinGroupCall?.(activeContact, activeGroupCall.callType)}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-1.5 rounded-full shadow-lg shadow-emerald-600/30 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+          >
+            {activeGroupCall.callType === "video" ? <Video className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+            <span>Join Call</span>
+          </button>
         </div>
       )}
 
