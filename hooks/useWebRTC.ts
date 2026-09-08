@@ -10,18 +10,13 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:openrelay.metered.ca:80" },
-    {
-      urls: [
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turn:openrelay.metered.ca:443?transport=tcp",
-        "turns:openrelay.metered.ca:443?transport=tcp",
-      ],
-      username: "openrelay",
-      credential: "openrelay",
-    },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:stun.services.mozilla.com:3478" },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export interface IncomingCallData {
@@ -137,15 +132,25 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length > 0 && remoteAudioRef.current) {
           audioTracks.forEach((t) => (t.enabled = true));
-          remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          const currentSrc = remoteAudioRef.current.srcObject as MediaStream | null;
+          const isSame = currentSrc && currentSrc.getAudioTracks().some((t) => t.id === audioTracks[0].id);
+          if (!isSame) {
+            remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          }
           remoteAudioRef.current.muted = false;
           remoteAudioRef.current.volume = 1.0;
-          remoteAudioRef.current.play().catch(() => {});
+          remoteAudioRef.current.play().catch((e) => {
+            console.log("Remote audio autoplay waiting interaction:", e);
+          });
         }
 
         const videoTracks = stream.getVideoTracks();
         if (videoTracks.length > 0 && remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = new MediaStream(videoTracks);
+          const currentVideoSrc = remoteVideoRef.current.srcObject as MediaStream | null;
+          const isSameVideo = currentVideoSrc && currentVideoSrc.getVideoTracks().some((t) => t.id === videoTracks[0].id);
+          if (!isSameVideo) {
+            remoteVideoRef.current.srcObject = new MediaStream(videoTracks);
+          }
           remoteVideoRef.current.muted = true;
           remoteVideoRef.current.play().catch(() => {});
         }
@@ -232,10 +237,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
           pc.addTrack(track, stream);
         });
 
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: type === "video",
-        });
+        const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
         const socket = getSocket(API_URL);
@@ -293,10 +295,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         iceCandidatesQueueRef.current = [];
       }
 
-      const answer = await pc.createAnswer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: incomingCall.callType === "video",
-      });
+      const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
       const socket = getSocket(API_URL);

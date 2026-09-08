@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, User } from "lucide-react";
+import React, { useEffect, useState, useCallback } from "react";
+import { Mic, MicOff, Video, VideoOff, PhoneOff, User, Volume2 } from "lucide-react";
 
 interface VideoCallOverlayProps {
   callState: "idle" | "calling" | "incoming" | "connected";
@@ -41,6 +41,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   const [isLocalSpeaking, setIsLocalSpeaking] = useState(false);
   const [localVolumeLevel, setLocalVolumeLevel] = useState(0);
   const [isRemoteSpeaking, setIsRemoteSpeaking] = useState(false);
+  const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const formatDuration = (seconds: number) => {
     const total = Math.max(0, Math.floor(seconds || 0));
@@ -58,21 +59,30 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         const audioTracks = remoteStream.getAudioTracks();
         if (audioTracks.length > 0 && remoteAudioRef.current) {
           audioTracks.forEach((t) => (t.enabled = true));
-          const audioOnlyStream = new MediaStream(audioTracks);
-          remoteAudioRef.current.srcObject = audioOnlyStream;
+          const currentSrc = remoteAudioRef.current.srcObject as MediaStream | null;
+          const isSame = currentSrc && currentSrc.getAudioTracks().some((t) => t.id === audioTracks[0].id);
+          if (!isSame) {
+            remoteAudioRef.current.srcObject = new MediaStream(audioTracks);
+          }
           remoteAudioRef.current.muted = false;
           remoteAudioRef.current.volume = 1.0;
-          remoteAudioRef.current.play().catch((e) => {
+          remoteAudioRef.current.play().then(() => {
+            setIsAudioBlocked(false);
+          }).catch((e) => {
             console.log("Remote audio autoplay waiting interaction:", e);
+            setIsAudioBlocked(true);
           });
         }
 
         // Attach video tracks ONLY to <video> (muted to satisfy autoplay)
         const videoTracks = remoteStream.getVideoTracks();
         if (videoTracks.length > 0 && remoteVideoRef.current) {
-          const videoOnlyStream = new MediaStream(videoTracks);
+          const currentVideoSrc = remoteVideoRef.current.srcObject as MediaStream | null;
+          const isSameVideo = currentVideoSrc && currentVideoSrc.getVideoTracks().some((t) => t.id === videoTracks[0].id);
+          if (!isSameVideo) {
+            remoteVideoRef.current.srcObject = new MediaStream(videoTracks);
+          }
           remoteVideoRef.current.muted = true;
-          remoteVideoRef.current.srcObject = videoOnlyStream;
           remoteVideoRef.current.play().catch(() => {});
         }
       }
@@ -116,15 +126,22 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     let analyser: AnalyserNode | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
     let animId: number | null = null;
+    let clonedTrack: MediaStreamTrack | null = null;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
         audioCtx = new AudioCtx();
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.4;
-        source = audioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+        
+        // Clone track to completely isolate Web Audio from WebRTC transmission on mobile
+        clonedTrack = audioTrack.clone();
+        source = audioCtx.createMediaStreamSource(new MediaStream([clonedTrack]));
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -151,6 +168,9 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
       if (source) {
         try { source.disconnect(); } catch (e) {}
       }
+      if (clonedTrack) {
+        try { clonedTrack.stop(); } catch (e) {}
+      }
       if (audioCtx && audioCtx.state !== "closed") {
         try { audioCtx.close().catch(() => {}); } catch (e) {}
       }
@@ -173,15 +193,20 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
     let analyser: AnalyserNode | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
     let animId: number | null = null;
+    let clonedTrack: MediaStreamTrack | null = null;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
         audioCtx = new AudioCtx();
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.4;
-        source = audioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+        clonedTrack = audioTrack.clone();
+        source = audioCtx.createMediaStreamSource(new MediaStream([clonedTrack]));
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -205,6 +230,9 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
       if (source) {
         try { source.disconnect(); } catch (e) {}
       }
+      if (clonedTrack) {
+        try { clonedTrack.stop(); } catch (e) {}
+      }
       if (audioCtx && audioCtx.state !== "closed") {
         try { audioCtx.close().catch(() => {}); } catch (e) {}
       }
@@ -214,11 +242,15 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   // User gesture tap to guarantee audio unpause
   const handleOverlayTap = useCallback(() => {
     try {
-      if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
+      if (remoteAudioRef.current) {
         remoteAudioRef.current.muted = false;
         remoteAudioRef.current.volume = 1.0;
         if (remoteAudioRef.current.paused) {
-          remoteAudioRef.current.play().catch(() => {});
+          remoteAudioRef.current.play().then(() => {
+            setIsAudioBlocked(false);
+          }).catch(() => {});
+        } else {
+          setIsAudioBlocked(false);
         }
       }
     } catch (e) {}
@@ -352,6 +384,22 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
               </div>
             )}
           </div>
+
+          {/* Mobile Sound Unblock Banner */}
+          {isAudioBlocked && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOverlayTap();
+                }}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 animate-bounce text-xs transition-all active:scale-95 cursor-pointer"
+              >
+                <Volume2 className="w-4 h-4" />
+                <span>Tap here to enable sound</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Bottom Call Controls Action Bar */}
