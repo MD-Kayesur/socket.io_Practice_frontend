@@ -85,6 +85,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             setIsGoogleLoading(false);
             return;
           }
+          if (
+            firebaseErr?.code === "auth/unauthorized-domain" ||
+            firebaseErr?.message?.includes("unauthorized-domain")
+          ) {
+            const currentDomain = typeof window !== "undefined" ? window.location.hostname : "your Vercel domain";
+            setErrorMsg(
+              `Firebase Notice: Domain '${currentDomain}' is not authorized. In Firebase Console, go to Authentication -> Settings -> Authorized domains -> Add Domain and add '${currentDomain}'.`
+            );
+            setIsGoogleLoading(false);
+            return;
+          }
+          if (
+            firebaseErr?.code === "auth/popup-blocked" ||
+            firebaseErr?.message?.includes("popup-blocked")
+          ) {
+            setErrorMsg(
+              "Firebase Notice: Sign-in popup was blocked by your browser. Please allow popups or tap the button below."
+            );
+            setIsGoogleLoading(false);
+            return;
+          }
           throw firebaseErr;
         }
       } else {
