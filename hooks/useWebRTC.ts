@@ -10,6 +10,7 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
     { urls: "stun:stun.cloudflare.com:3478" },
     {
       urls: [
@@ -19,6 +20,15 @@ const RTC_CONFIG: RTCConfiguration = {
       ],
       username: "openrelay",
       credential: "openrelay",
+    },
+    {
+      urls: [
+        "turn:staticauth.openrelay.metered.ca:80",
+        "turn:staticauth.openrelay.metered.ca:443",
+        "turn:staticauth.openrelay.metered.ca:443?transport=tcp",
+      ],
+      username: "openrelayproject",
+      credential: "openrelayprojectsecret",
     },
   ],
   iceCandidatePoolSize: 10,
@@ -206,9 +216,12 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       localStreamRef.current = stream;
       setLocalStream(stream);
       if (localVideoRef.current) {
-        localVideoRef.current.muted = true;
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.play().catch(() => {});
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length > 0) {
+          localVideoRef.current.muted = true;
+          localVideoRef.current.srcObject = new MediaStream(videoTracks);
+          localVideoRef.current.play().catch(() => {});
+        }
       }
       return stream;
     } catch (err) {
@@ -222,9 +235,12 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         localStreamRef.current = stream;
         setLocalStream(stream);
         if (localVideoRef.current) {
-          localVideoRef.current.muted = true;
-          localVideoRef.current.srcObject = stream;
-          localVideoRef.current.play().catch(() => {});
+          const videoTracks = stream.getVideoTracks();
+          if (videoTracks.length > 0) {
+            localVideoRef.current.muted = true;
+            localVideoRef.current.srcObject = new MediaStream(videoTracks);
+            localVideoRef.current.play().catch(() => {});
+          }
         }
         return stream;
       } catch (fallbackErr) {
