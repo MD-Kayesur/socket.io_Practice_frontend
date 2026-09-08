@@ -111,7 +111,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         ref={remoteAudioRef}
         autoPlay
         playsInline
-        className="hidden"
+        className="fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none"
       />
 
       <div className="relative w-full h-full md:max-w-5xl md:max-h-[85vh] md:rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
