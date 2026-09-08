@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { IncomingCallData } from "@/hooks/useWebRTC";
 import { Phone, PhoneOff, Video, Mic } from "lucide-react";
 

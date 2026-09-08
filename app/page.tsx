@@ -1279,30 +1279,34 @@ function MessengerContent() {
       {/* Protected WebRTC Call Modals */}
       <CallErrorBoundary onReset={endCall}>
         {/* Incoming WebRTC Call Dialog */}
-        <IncomingCallModal
-          incomingCall={incomingCall}
-          onAccept={acceptCall}
-          onReject={rejectCall}
-        />
+        {incomingCall && (
+          <IncomingCallModal
+            incomingCall={incomingCall}
+            onAccept={acceptCall}
+            onReject={rejectCall}
+          />
+        )}
 
         {/* Active WebRTC Call Overlay */}
-        <VideoCallOverlay
-          callState={callState}
-          callType={callType}
-          peerInfo={peerInfo}
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          callDuration={callDuration}
-          localVideoRef={localVideoRef}
-          remoteVideoRef={remoteVideoRef}
-          remoteAudioRef={remoteAudioRef}
-          localStream={localStream}
-          remoteStream={remoteStream}
-          isRemoteVideoActive={isRemoteVideoActive}
-          onEndCall={endCall}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-        />
+        {(callState === "calling" || callState === "connected") && (
+          <VideoCallOverlay
+            callState={callState}
+            callType={callType}
+            peerInfo={peerInfo}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            callDuration={callDuration}
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            remoteAudioRef={remoteAudioRef}
+            localStream={localStream}
+            remoteStream={remoteStream}
+            isRemoteVideoActive={isRemoteVideoActive}
+            onEndCall={endCall}
+            onToggleMute={toggleMute}
+            onToggleVideo={toggleVideo}
+          />
+        )}
       </CallErrorBoundary>
     </div>
   );

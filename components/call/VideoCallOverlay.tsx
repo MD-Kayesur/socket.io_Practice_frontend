@@ -42,8 +42,6 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
   const [localVolumeLevel, setLocalVolumeLevel] = useState(0);
   const [isRemoteSpeaking, setIsRemoteSpeaking] = useState(false);
 
-  if (callState === "idle" || callState === "incoming") return null;
-
   const formatDuration = (seconds: number) => {
     const total = Math.max(0, Math.floor(seconds || 0));
     const mins = Math.floor(total / 60);
@@ -53,6 +51,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
 
   // 1. Separate Audio & Video tracks so Chromium never mutes remote voice audio
   useEffect(() => {
+    if (callState === "idle" || callState === "incoming") return;
     try {
       if (remoteStream) {
         // Attach audio tracks ONLY to <audio> (unmuted, volume 1.0)
@@ -84,6 +83,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
 
   // 2. Attach local video track
   useEffect(() => {
+    if (callState === "idle" || callState === "incoming") return;
     try {
       if (localStream && localVideoRef.current) {
         const videoTracks = localStream.getVideoTracks();
@@ -100,7 +100,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
 
   // 3. Real-time Google Meet Style Voice Volume Detection for Local Mic
   useEffect(() => {
-    if (!localStream || isMuted) {
+    if (callState === "idle" || callState === "incoming" || !localStream || isMuted) {
       setIsLocalSpeaking(false);
       setLocalVolumeLevel(0);
       return;
@@ -155,11 +155,11 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         try { audioCtx.close().catch(() => {}); } catch (e) {}
       }
     };
-  }, [localStream, isMuted]);
+  }, [localStream, isMuted, callState]);
 
   // 4. Real-time Voice Volume Detection for Remote Peer (Speaking Indicator)
   useEffect(() => {
-    if (!remoteStream) {
+    if (callState === "idle" || callState === "incoming" || !remoteStream) {
       setIsRemoteSpeaking(false);
       return;
     }
@@ -209,7 +209,7 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
         try { audioCtx.close().catch(() => {}); } catch (e) {}
       }
     };
-  }, [remoteStream]);
+  }, [remoteStream, callState]);
 
   // User gesture tap to guarantee audio unpause
   const handleOverlayTap = useCallback(() => {
@@ -223,6 +223,8 @@ export const VideoCallOverlay: React.FC<VideoCallOverlayProps> = ({
       }
     } catch (e) {}
   }, [remoteAudioRef]);
+
+  if (callState === "idle" || callState === "incoming") return null;
 
   const showLiveVideo = Boolean(isRemoteVideoActive && callState === "connected" && callType === "video");
 
