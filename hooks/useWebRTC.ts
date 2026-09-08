@@ -117,36 +117,34 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
 
     pc.ontrack = (event) => {
       console.log("WebRTC received remote track:", event.track.kind, event.track.id);
-      
-      // Use the native event.streams[0] directly so Chromium WebRtcAudioRenderer matches SDP stream ID
-      let stream = event.streams && event.streams[0] ? event.streams[0] : remoteStreamRef.current;
-      if (!stream) {
-        stream = new MediaStream();
-      }
-      if (!event.streams || !event.streams[0]) {
+      let stream = remoteStreamRef.current;
+      if (event.streams && event.streams[0]) {
+        stream = event.streams[0];
+      } else {
+        if (!stream) {
+          stream = new MediaStream();
+        }
         stream.addTrack(event.track);
       }
 
       remoteStreamRef.current = stream;
       setRemoteStream(stream);
 
-      // Explicitly ensure track is enabled
-      event.track.enabled = true;
-
       if (event.track.kind === "video") {
         setIsRemoteVideoActive(true);
         event.track.onended = () => setIsRemoteVideoActive(false);
       }
 
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
-        remoteVideoRef.current.muted = false;
-        remoteVideoRef.current.play().catch((e) => console.log("Remote video play waiting:", e));
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch((e) => console.log("Remote audio play waiting:", e));
-      }
+      try {
+        if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== stream) {
+          remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+        if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== stream) {
+          remoteAudioRef.current.srcObject = stream;
+          remoteAudioRef.current.play().catch(() => {});
+        }
+      } catch (e) {}
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -222,10 +220,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
         const stream = await getUserMedia(type);
         const pc = createPeerConnection(recipient.id);
 
-        stream.getTracks().forEach((track) => {
-          track.enabled = true;
-          pc.addTrack(track, stream);
-        });
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -273,10 +268,7 @@ export const useWebRTC = (currentUserId: string, currentUserName: string, curren
       const stream = await getUserMedia(incomingCall.callType);
       const pc = createPeerConnection(callerId);
 
-      stream.getTracks().forEach((track) => {
-        track.enabled = true;
-        pc.addTrack(track, stream);
-      });
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signalData));
 

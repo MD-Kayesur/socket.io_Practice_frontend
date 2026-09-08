@@ -29,7 +29,7 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
           loop
           playsInline
           src={ringtoneUri}
-          className="fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none"
+          className="hidden pointer-events-none"
         />
       )}
       <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center">
