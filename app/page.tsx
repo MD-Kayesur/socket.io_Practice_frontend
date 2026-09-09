@@ -11,6 +11,7 @@ import { CreateGroupModal } from "@/components/chat/CreateGroupModal";
 import { AddMemberModal } from "@/components/chat/AddMemberModal";
 import { GroupMembersModal } from "@/components/chat/GroupMembersModal";
 import { IncomingCallModal } from "@/components/call/IncomingCallModal";
+import { IncomingGroupCallModal } from "@/components/call/IncomingGroupCallModal";
 import { VideoCallOverlay } from "@/components/call/VideoCallOverlay";
 import { GroupCallOverlay } from "@/components/call/GroupCallOverlay";
 import { CallErrorBoundary } from "@/components/call/CallErrorBoundary";
@@ -144,6 +145,9 @@ function MessengerContent() {
     isMuted: isGroupMuted,
     isVideoOff: isGroupVideoOff,
     activeGroupCallsMap,
+    incomingGroupCall,
+    acceptIncomingGroupCall,
+    rejectIncomingGroupCall,
     startGroupCall,
     joinGroupCall,
     leaveGroupCall,
@@ -1326,6 +1330,15 @@ function MessengerContent() {
             incomingCall={incomingCall}
             onAccept={acceptCall}
             onReject={rejectCall}
+          />
+        )}
+
+        {/* Incoming WebRTC Group Call Dialog */}
+        {incomingGroupCall && (
+          <IncomingGroupCallModal
+            incomingCall={incomingGroupCall}
+            onAccept={acceptIncomingGroupCall}
+            onReject={rejectIncomingGroupCall}
           />
         )}
 
