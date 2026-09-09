@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getSocket } from "@/lib/socket";
+import { ringtoneManager } from "@/lib/ringtone";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -54,6 +55,15 @@ export const useGroupWebRTC = (
 
   // Ongoing call banner in chat
   const [activeGroupCallsMap, setActiveGroupCallsMap] = useState<Record<string, ActiveGroupCallInfo>>({});
+
+  // Incoming group call alert & ringing state
+  const [incomingGroupCall, setIncomingGroupCall] = useState<ActiveGroupCallInfo | null>(null);
+  const incomingGroupCallRef = useRef<ActiveGroupCallInfo | null>(null);
+
+  const setIncomingCallState = useCallback((call: ActiveGroupCallInfo | null) => {
+    incomingGroupCallRef.current = call;
+    setIncomingGroupCall(call);
+  }, []);
 
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const peerUsersRef = useRef<Map<string, { id: string; name: string; avatar?: string }>>(new Map());
@@ -115,6 +125,10 @@ export const useGroupWebRTC = (
     remoteStreamsRef.current.clear();
     iceCandidatesQueueRef.current.clear();
 
+    // Stop ringtone if still ringing
+    ringtoneManager.stop();
+    setIncomingCallState(null);
+
     setLocalStream(null);
     setParticipants([]);
     setIsGroupCallActive(false);
@@ -122,7 +136,7 @@ export const useGroupWebRTC = (
     activeGroupIdRef.current = null;
     setIsMuted(false);
     setIsVideoOff(false);
-  }, [currentUserId]);
+  }, [currentUserId, setIncomingCallState]);
 
   // Acquire user media stream (camera & mic)
   const getUserMedia = useCallback(async (type: "audio" | "video") => {
@@ -317,6 +331,25 @@ export const useGroupWebRTC = (
     [currentUserId, currentUserName, currentUserAvatar, getUserMedia, leaveGroupCall]
   );
 
+  // Accept incoming ringing group call
+  const acceptIncomingGroupCall = useCallback(() => {
+    const call = incomingGroupCallRef.current;
+    ringtoneManager.stop();
+    setIncomingCallState(null);
+    if (call) {
+      joinGroupCall(
+        { id: call.groupId, name: call.groupName, avatar: call.groupAvatar },
+        call.callType
+      );
+    }
+  }, [joinGroupCall, setIncomingCallState]);
+
+  // Reject / decline incoming ringing group call
+  const rejectIncomingGroupCall = useCallback(() => {
+    ringtoneManager.stop();
+    setIncomingCallState(null);
+  }, [setIncomingCallState]);
+
   // Toggle Mute Local Mic
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
@@ -349,6 +382,13 @@ export const useGroupWebRTC = (
         ...prev,
         [data.groupId]: data,
       }));
+
+      // Trigger ringing and incoming modal if call was initiated by another member
+      // and this user is not currently in this group call
+      if (data.caller.id !== currentUserId && activeGroupIdRef.current !== data.groupId) {
+        setIncomingCallState(data);
+        ringtoneManager.start();
+      }
     };
 
     // When participant count changes in a group call
@@ -372,6 +412,12 @@ export const useGroupWebRTC = (
         delete copy[data.groupId];
         return copy;
       });
+
+      // Stop ringing and close modal if this was the incoming call
+      if (incomingGroupCallRef.current?.groupId === data.groupId) {
+        ringtoneManager.stop();
+        setIncomingCallState(null);
+      }
 
       if (activeGroupIdRef.current === data.groupId) {
         leaveGroupCall();
@@ -506,6 +552,7 @@ export const useGroupWebRTC = (
     socket.on("userLeftGroupCall", handleUserLeftGroupCall);
 
     return () => {
+      ringtoneManager.stop();
       socket.off("groupCallStarted", handleGroupCallStarted);
       socket.off("groupCallUpdated", handleGroupCallUpdated);
       socket.off("groupCallEnded", handleGroupCallEnded);
@@ -514,7 +561,7 @@ export const useGroupWebRTC = (
       socket.off("groupCallSignal", handleGroupCallSignal);
       socket.off("userLeftGroupCall", handleUserLeftGroupCall);
     };
-  }, [currentUserId, currentUserName, currentUserAvatar, createPeerConnection, updateParticipantsState, leaveGroupCall]);
+  }, [currentUserId, currentUserName, currentUserAvatar, createPeerConnection, updateParticipantsState, leaveGroupCall, setIncomingCallState]);
 
   return {
     isGroupCallActive,
@@ -526,6 +573,9 @@ export const useGroupWebRTC = (
     isMuted,
     isVideoOff,
     activeGroupCallsMap,
+    incomingGroupCall,
+    acceptIncomingGroupCall,
+    rejectIncomingGroupCall,
     startGroupCall,
     joinGroupCall,
     leaveGroupCall,
