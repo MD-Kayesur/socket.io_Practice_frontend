@@ -57,27 +57,27 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const totalUnread = contacts.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 
   return (
-    <div className="w-full md:w-80 lg:w-96 flex flex-col bg-slate-900 border-r border-slate-800 h-full select-none flex-shrink-0">
+    <div className="w-full md:w-80 lg:w-96 flex flex-col bg-slate-900 border-r-0 md:border-r border-slate-800 h-full select-none flex-shrink-0">
       {/* Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="p-3.5 sm:p-4 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <div className="relative flex-shrink-0">
             <img
               src="/Screenshot_2026-08-19_at_11.41.20_AM-removebg-preview.png"
               alt="App Logo"
-              className="w-10 h-10 object-contain drop-shadow-md"
+              className="w-9 h-9 sm:w-10 sm:h-10 object-contain drop-shadow-md"
             />
           </div>
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="font-semibold text-slate-100 text-sm truncate flex items-center gap-1.5">
               <span>{currentUser.name}</span>
             </h2>
-            <p className="text-xs text-emerald-400">Active Now</p>
+            <p className="text-[11px] text-emerald-400 font-medium leading-tight">Active Now</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <button
             type="button"
             onClick={onOpenNewChatModal}

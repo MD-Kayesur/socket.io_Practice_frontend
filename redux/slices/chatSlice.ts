@@ -7,7 +7,7 @@ interface ChatState {
 }
 
 const initialState: ChatState = {
-  activeContactId: "contact-1",
+  activeContactId: "",
   socketStatus: "disconnected",
   serverUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
 };

@@ -1122,6 +1122,7 @@ function MessengerContent() {
   const activeContact =
     contacts.find((c) => c.id === activeContactId) || null;
   const currentMessages = messagesMap[activeContactId] || [];
+  const isChatOpenOnMobile = Boolean(activeContact && activeContactId);
 
   return (
     <div className="flex flex-col h-[100dvh] w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -1172,7 +1173,7 @@ function MessengerContent() {
         {/* Sidebar: Full-width on mobile when no contact selected, hidden on mobile when contact selected, fixed width on md+ */}
         <div
           className={`${
-            activeContactId ? "hidden md:flex" : "flex"
+            isChatOpenOnMobile ? "hidden md:flex" : "flex"
           } h-full w-full md:w-80 lg:w-96 flex-shrink-0`}
         >
           <ChatSidebar
@@ -1189,7 +1190,7 @@ function MessengerContent() {
         {/* Primary Chat Window: Hidden on mobile when no contact selected, full-width on mobile when contact selected, flex-1 on md+ */}
         <div
           className={`${
-            activeContactId ? "flex" : "hidden md:flex"
+            isChatOpenOnMobile ? "flex" : "hidden md:flex"
           } h-full w-full flex-1`}
         >
           <ChatWindow
@@ -1249,7 +1250,7 @@ function MessengerContent() {
               className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
               onClick={() => setIsMobileSidebarOpen(false)}
             />
-            <div className="relative z-50 w-[85%] max-w-sm h-full bg-slate-900 shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="relative z-50 w-full h-full bg-slate-900 shadow-2xl animate-in slide-in-from-left duration-200 flex flex-col">
               <ChatSidebar
                 contacts={contacts}
                 activeContactId={activeContactId}
