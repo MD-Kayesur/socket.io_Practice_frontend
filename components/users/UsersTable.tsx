@@ -32,7 +32,7 @@ export const UsersTable: React.FC = () => {
   return (
     <div className="w-full max-w-5xl mx-auto p-4 md:p-6 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <button
             onClick={() => router.push("/")}
@@ -40,8 +40,8 @@ export const UsersTable: React.FC = () => {
           >
             <ArrowLeft className="w-4 h-4" /> Back to Messenger
           </button>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2.5">
-            <UserCheck className="w-7 h-7 text-indigo-500" /> Users Directory
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5">
+            <UserCheck className="w-6 h-6 sm:w-7 sm:h-7 text-indigo-500" /> Users Directory
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Registered users in PostgreSQL. Click "Message" to start a live conversation.
@@ -50,7 +50,7 @@ export const UsersTable: React.FC = () => {
 
         <button
           onClick={() => refetch()}
-          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition-colors"
+          className="self-start sm:self-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition-colors active:scale-95"
         >
           Refresh List
         </button>
@@ -71,83 +71,139 @@ export const UsersTable: React.FC = () => {
         </div>
       )}
 
-      {/* Users Table */}
+      {/* Users Directory Views */}
       {!isLoading && !error && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-800/80 border-b border-slate-700/80 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3.5 px-6">User</th>
-                  <th className="py-3.5 px-6">Email</th>
-                  <th className="py-3.5 px-6">Joined Date</th>
-                  <th className="py-3.5 px-6 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-sm">
-                {displayUsers && displayUsers.length > 0 ? (
-                  displayUsers.map((user: any) => (
-                    <tr
-                      key={user.id}
-                      className="hover:bg-slate-800/50 transition-colors"
+        <>
+          {/* 1. Mobile Cards View (< sm) */}
+          <div className="sm:hidden space-y-3">
+            {displayUsers && displayUsers.length > 0 ? (
+              displayUsers.map((user: any) => (
+                <div
+                  key={user.id}
+                  className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shadow-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={
+                        user.avatar ||
+                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
+                      }
+                      alt={user.name}
+                      className="w-11 h-11 rounded-full object-cover ring-1 ring-slate-700 flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-slate-100 text-sm truncate">
+                        {user.name}
+                      </div>
+                      <div className="text-slate-400 text-xs truncate flex items-center gap-1 mt-0.5">
+                        <Mail className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                        <span className="truncate">{user.email}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+                    <span className="text-slate-500 text-[11px] flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-600" />
+                      {user.createdAt
+                        ? new Date(user.createdAt).toLocaleDateString()
+                        : "Recently"}
+                    </span>
+
+                    <button
+                      onClick={() => handleMessageUser(user)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
                     >
-                      <td className="py-4 px-6 flex items-center gap-3">
-                        <img
-                          src={
-                            user.avatar ||
-                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
-                          }
-                          alt={user.name}
-                          className="w-10 h-10 rounded-full object-cover ring-1 ring-slate-700"
-                        />
-                        <div>
-                          <div className="font-semibold text-slate-100">
-                            {user.name}
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      Message
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+                No users found in database yet.
+              </div>
+            )}
+          </div>
+
+          {/* 2. Desktop/Tablet Table View (>= sm) */}
+          <div className="hidden sm:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-800/80 border-b border-slate-700/80 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3.5 px-6">User</th>
+                    <th className="py-3.5 px-6">Email</th>
+                    <th className="py-3.5 px-6">Joined Date</th>
+                    <th className="py-3.5 px-6 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-sm">
+                  {displayUsers && displayUsers.length > 0 ? (
+                    displayUsers.map((user: any) => (
+                      <tr
+                        key={user.id}
+                        className="hover:bg-slate-800/50 transition-colors"
+                      >
+                        <td className="py-4 px-6 flex items-center gap-3">
+                          <img
+                            src={
+                              user.avatar ||
+                              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80"
+                            }
+                            alt={user.name}
+                            className="w-10 h-10 rounded-full object-cover ring-1 ring-slate-700"
+                          />
+                          <div>
+                            <div className="font-semibold text-slate-100">
+                              {user.name}
+                            </div>
+                            <div className="text-[11px] text-emerald-400 font-medium">
+                              Active Account
+                            </div>
                           </div>
-                          <div className="text-[11px] text-emerald-400 font-medium">
-                            Active Account
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-slate-300 text-xs font-mono">
-                        <span className="flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-slate-500" />
-                          {user.email}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-slate-400 text-xs">
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                          {user.createdAt
-                            ? new Date(user.createdAt).toLocaleDateString()
-                            : "Recently"}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <button
-                          onClick={() => handleMessageUser(user)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          Message
-                        </button>
+                        </td>
+                        <td className="py-4 px-6 text-slate-300 text-xs font-mono">
+                          <span className="flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-slate-500" />
+                            {user.email}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-slate-400 text-xs">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                            {user.createdAt
+                              ? new Date(user.createdAt).toLocaleDateString()
+                              : "Recently"}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <button
+                            onClick={() => handleMessageUser(user)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            Message
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="py-12 text-center text-slate-500 text-xs"
+                      >
+                        No users found in database yet.
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="py-12 text-center text-slate-500 text-xs"
-                    >
-                      No users found in database yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

@@ -77,24 +77,24 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
             type="button"
             onClick={onOpenNewChatModal}
             title="Start 1-on-1 chat"
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">New Chat</span>
+            <span className="inline sm:inline">New Chat</span>
           </button>
           <button
             type="button"
             onClick={onOpenCreateGroupModal}
             title="Create new group chat"
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-lg text-xs font-semibold border border-indigo-500/30 transition-all"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-lg text-xs font-semibold border border-indigo-500/30 transition-all active:scale-95"
           >
             <Users className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">+ Group</span>
+            <span className="inline sm:inline">+ Group</span>
           </button>
           {onCloseMobileSidebar && (
             <button
@@ -246,7 +246,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     onDeleteContact?.(contact.id);
                   }}
                   title="Remove from sidebar"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/contact:opacity-100 p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-all"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-70 sm:opacity-0 sm:group-hover/contact:opacity-100 p-1.5 text-slate-400 hover:text-rose-400 active:text-rose-400 hover:bg-slate-800 rounded-lg transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

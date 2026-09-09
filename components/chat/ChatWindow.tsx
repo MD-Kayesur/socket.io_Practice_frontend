@@ -135,21 +135,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           }`}
           title={activeContact.isGroup ? "Click to view group members" : undefined}
         >
-          {onToggleMobileSidebar && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMobileSidebar();
-              }}
-              title="Toggle conversations menu"
-              className="md:hidden p-1.5 px-2.5 text-slate-300 hover:text-slate-100 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1 border border-slate-700 text-xs font-semibold"
-            >
-              <Menu className="w-4 h-4 text-indigo-400" />
-              <span>Chats</span>
-            </button>
-          )}
-
           {onBack && (
             <button
               type="button"
@@ -158,7 +143,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 onBack();
               }}
               title="Back to conversations"
-              className="hidden md:hidden p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors"
+              className="flex md:hidden p-1.5 -ml-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded-full transition-colors flex-shrink-0 active:scale-95"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -187,12 +172,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             )}
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <h2 className="font-semibold text-slate-100 text-sm leading-snug truncate group-hover/header:text-indigo-300 transition-colors">
                 {activeContact.name}
               </h2>
               {activeContact.isGroup && (
-                <span className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">
+                <span className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30 flex-shrink-0">
                   Group
                 </span>
               )}
@@ -212,11 +197,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1 text-slate-400 flex-shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 text-slate-400 flex-shrink-0">
           {activeContact.isGroup && onOpenAddMemberModal && (
             <button
               onClick={onOpenAddMemberModal}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow transition-all active:scale-95 mr-1"
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow transition-all active:scale-95 mr-0.5 sm:mr-1"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Add Member</span>
@@ -225,14 +210,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           <button
             onClick={onStartAudioCall}
             title={activeContact.isGroup ? "Start Group Audio Call" : "Start Audio Call"}
-            className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
+            className="p-1.5 sm:p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
           >
             <Phone className="w-4 h-4" />
           </button>
           <button
             onClick={onStartVideoCall}
             title={activeContact.isGroup ? "Start Group Video Call" : "Start Video Call"}
-            className="p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
+            className="p-1.5 sm:p-2 hover:text-slate-100 hover:bg-slate-800 rounded-full transition-colors active:scale-95"
           >
             <Video className="w-4 h-4" />
           </button>
@@ -241,7 +226,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             <button
               onClick={() => setIsOptionsMenuOpen((prev) => !prev)}
               title="Chat Options & Details"
-              className={`p-2 rounded-full transition-all ${
+              className={`p-1.5 sm:p-2 rounded-full transition-all ${
                 isOptionsMenuOpen
                   ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
                   : "hover:text-slate-100 hover:bg-slate-800"
@@ -259,7 +244,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 />
 
                 {/* Popover Dropdown Menu */}
-                <div className="absolute right-0 top-full mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-50 p-1.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 top-full mt-2 w-56 max-w-[85vw] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-50 p-1.5 animate-in fade-in zoom-in-95 duration-150">
                   {/* Header */}
                   <div className="px-3 py-2 border-b border-slate-800/80 mb-1">
                     <p className="text-xs font-bold text-slate-200 truncate">

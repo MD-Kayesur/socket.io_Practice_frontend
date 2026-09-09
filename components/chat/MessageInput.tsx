@@ -64,7 +64,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   return (
-    <div className="p-3 bg-slate-900 border-t border-slate-800">
+    <div className="p-2.5 sm:p-3 bg-slate-900 border-t border-slate-800 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
       {!isAuthenticated && (
         <div className="mb-2 p-2 bg-indigo-950/80 border border-indigo-500/30 rounded-lg flex items-center justify-between text-xs text-indigo-200">
           <span>🔒 You must create an account or log in to send messages.</span>
@@ -79,21 +79,21 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       )}
       <form
         onSubmit={handleSend}
-        className="flex items-center gap-2"
+        className="flex items-center gap-1.5 sm:gap-2"
       >
-        <div className="flex items-center gap-1 text-slate-400">
+        <div className="flex items-center gap-0.5 sm:gap-1 text-slate-400 flex-shrink-0">
           <button
             type="button"
             disabled={!isAuthenticated}
-            className="p-2 hover:text-slate-200 hover:bg-slate-800 rounded-full disabled:opacity-40"
+            className="p-2 hover:text-slate-200 hover:bg-slate-800 rounded-full disabled:opacity-40 transition-colors"
           >
-            <Paperclip className="w-5 h-5" />
+            <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           <button
             type="button"
             disabled={!isAuthenticated}
-            className="p-2 hover:text-slate-200 hover:bg-slate-800 rounded-full hidden sm:block disabled:opacity-40"
+            className="p-2 hover:text-slate-200 hover:bg-slate-800 rounded-full hidden sm:block disabled:opacity-40 transition-colors"
           >
             <ImageIcon className="w-5 h-5" />
           </button>
@@ -112,26 +112,26 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 ? "You are no longer a member of this group"
                 : isAuthenticated
                 ? "Type a message..."
-                : "Create an account or log in to message..."
+                : "Create an account to message..."
             }
             disabled={disabled}
-            className="w-full bg-slate-800 text-slate-100 placeholder-slate-400 text-sm rounded-xl pl-4 pr-10 py-3 border border-slate-700/60 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-50"
+            className="w-full bg-slate-800 text-slate-100 placeholder-slate-400 text-base sm:text-sm rounded-xl pl-3.5 sm:pl-4 pr-9 sm:pr-10 py-2.5 sm:py-3 border border-slate-700/60 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-50"
           />
 
           <button
             type="button"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+            className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-1"
           >
-            <Smile className="w-5 h-5" />
+            <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         <button
           type="submit"
           disabled={(!text.trim() && isAuthenticated) || disabled}
-          className="p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl disabled:opacity-40"
+          className="p-2.5 sm:p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl disabled:opacity-40 flex-shrink-0 active:scale-95 transition-all"
         >
-          <Send className="w-5 h-5" />
+          <Send className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
       </form>
     </div>

@@ -83,9 +83,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="p-4 md:p-5 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 md:p-5 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl border border-indigo-500/30">
               <UserPlus className="w-5 h-5" />
@@ -109,7 +109,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         </div>
 
         {/* Body Form */}
-        <form onSubmit={handleAdd} className="p-4 md:p-5 space-y-4">
+        <form onSubmit={handleAdd} className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
           <div>
             {/* Selected User Chips Horizontal Bar */}
             {selectedUsers.length > 0 && (

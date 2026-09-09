@@ -1124,14 +1124,14 @@ function MessengerContent() {
   const currentMessages = messagesMap[activeContactId] || [];
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-[100dvh] w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Top Socket & Redux Auth Status Bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-2">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3 sm:px-4 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
             src="/Screenshot_2026-08-19_at_11.42.59_AM-removebg-preview.png"
             alt="Navbar Logo"
-            className="h-8 md:h-9 w-auto object-contain drop-shadow"
+            className="h-7 sm:h-8 md:h-9 w-auto object-contain drop-shadow flex-shrink-0"
           />
           <SocketStatusBadge
             status={socketStatus}
@@ -1140,28 +1140,28 @@ function MessengerContent() {
           />
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 sm:gap-3 text-xs flex-shrink-0">
           {isAuthenticated ? (
-            <div className="flex items-center gap-2">
-              <span className="text-emerald-400 font-medium flex items-center gap-1">
-                <UserIcon className="w-3.5 h-3.5" />
-                {authUser?.name}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-emerald-400 font-medium flex items-center gap-1 max-w-[90px] xs:max-w-[140px] sm:max-w-[180px] truncate">
+                <UserIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{authUser?.name}</span>
               </span>
               <button
                 onClick={() => dispatch(logout())}
-                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-300 rounded border border-slate-700 transition-colors"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-300 rounded border border-slate-700 transition-colors active:scale-95"
               >
                 <LogOut className="w-3 h-3" />
-                Logout
+                <span className="hidden sm:inline">Logout</span>
               </button>
             </div>
           ) : (
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded transition-colors shadow-sm active:scale-95"
             >
               <LogIn className="w-3.5 h-3.5" />
-              Log In / Sign Up
+              <span>Log In</span>
             </button>
           )}
         </div>
@@ -1169,8 +1169,12 @@ function MessengerContent() {
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Desktop Sidebar (hidden on mobile, visible on md screens) */}
-        <div className="hidden md:flex h-full w-80 lg:w-96 flex-shrink-0">
+        {/* Sidebar: Full-width on mobile when no contact selected, hidden on mobile when contact selected, fixed width on md+ */}
+        <div
+          className={`${
+            activeContactId ? "hidden md:flex" : "flex"
+          } h-full w-full md:w-80 lg:w-96 flex-shrink-0`}
+        >
           <ChatSidebar
             contacts={contacts}
             activeContactId={activeContactId}
@@ -1182,8 +1186,12 @@ function MessengerContent() {
           />
         </div>
 
-        {/* Primary Chat Window */}
-        <div className="h-full w-full flex-1 flex">
+        {/* Primary Chat Window: Hidden on mobile when no contact selected, full-width on mobile when contact selected, flex-1 on md+ */}
+        <div
+          className={`${
+            activeContactId ? "flex" : "hidden md:flex"
+          } h-full w-full flex-1`}
+        >
           <ChatWindow
             activeContact={activeContact}
             messages={currentMessages}
